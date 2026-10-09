@@ -1,6 +1,6 @@
 # eTRiS local MCP
 
-A local MCP server for navigating HRD Corp eTRiS in a visible browser. The user signs in locally; an MCP-compatible assistant can inspect pages, navigate menus, read program tables, prepare program forms, and request save/delete actions.
+A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the background during routine use. The user signs in locally; an MCP-compatible assistant can inspect pages, navigate menus, read program tables, prepare program forms, and request save/delete actions.
 
 **Status:** local browser integration. Authenticated navigation to **Applications → Profile Management → Training Programme → View My Programme** has been tested. `etric_sections` captures the current account's authorized menu routes dynamically; `etric_open_section` opens a captured route, and `etric_program_list` opens View My Programme automatically. Form writes, uploads, pagination, and final submission receipts still need account-specific validation. These tools do not provide a direct program database API.
 
@@ -129,6 +129,8 @@ npm run stop
 This retains the saved credentials/profile. Use `etric_forget_login` to remove them after local review. To diagnose worker startup, run `node dist/index.js --worker` in a terminal after stopping an existing worker.
 
 ## Development
+
+Read [AGENTS.md](AGENTS.md) for the shared project workflow, [CLAUDE.md](CLAUDE.md) for Claude's entry point, and [intents.md](intents.md) for objectives and acceptance criteria. Read and update [learning.md](learning.md) for every task so verified lessons and remaining work carry across sessions.
 
 ```powershell
 npm test
