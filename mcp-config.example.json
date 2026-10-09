@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "etric": {
+      "command": "node",
+      "args": ["D:/dev/etric-mcp/dist/index.js"]
+    }
+  }
+}
