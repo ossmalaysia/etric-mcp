@@ -10,7 +10,8 @@
     "login": "node dist/index.js --login",
     "save-login": "node dist/index.js --save-login",
     "stop": "node dist/index.js --stop",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "test:read": "npm run build && node scripts/test-read.mjs"
   },
   "engines": {
     "node": ">=22"

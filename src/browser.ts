@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { allowedUrl, portalOrigin, portalUrl } from './config.js';
 import type { Credentials } from './vault.js';
-import { safeNavigationUrl, redactNavigationText, selectSection, type MenuEntry } from './navigation.js';
+import { safeNavigationUrl, redactNavigationText, selectSection, programmeReadUrl, type MenuEntry } from './navigation.js';
 
 export interface Control { ref: string; tag: string; type: string; label: string; id?: string; name?: string; href?: string; navigationUrl?: string; onclick?: string; activation?: 'click' | 'double_click'; value?: string; options?: { label: string; value: string }[] }
 export interface FrameView { index: number; url?: string; name?: string; visible?: boolean; text: string; controls: Control[]; tables: string[][][]; loginRequired: boolean }
-export interface View { snapshotId: string; url: string; title: string; frames: FrameView[]; loginRequired: boolean; loading: boolean; dismissedDialogs?: string[]; popupWindows?: { index: number; title: string; url?: string }[] }
+export interface View { snapshotId: string; url: string; title: string; frames: FrameView[]; loginRequired: boolean; sessionExpired?: boolean; loading: boolean; dismissedDialogs?: string[]; popupWindows?: { index: number; title: string; url?: string }[] }
 export interface Field { ref: string; value: string }
 interface Target { frame: Frame; locator: Locator; control: Control }
 
@@ -34,11 +34,11 @@ export class BrowserSession {
     const current = this.active;
     const hadContext = !!this.context;
     const activeUrl = current?.url().startsWith(this.origin) ? current.url() : this.baseUrl;
-    const appFrame = current?.frames().find(frame => frame.name() === 'iframe_Applications');
+    const appFrame = current ? await this.applicationFrame(current) : undefined;
     const appUrl = appFrame?.url().startsWith(this.origin) ? appFrame.url() : undefined;
     // Keep session cookies only in memory during the browser restart.
     const cookies = await this.context?.cookies();
-    const drafts = current ? await Promise.all(current.frames().filter(frame => frame.url().startsWith(this.origin)).map(async frame => ({ name: frame.name(), fields: await frame.evaluate(() => {
+    const drafts = current ? await Promise.all(current.frames().filter(frame => frame.url().startsWith(this.origin)).map(async frame => ({ name: frame.name(), application: frame === appFrame, fields: await frame.evaluate(() => {
       if (document.querySelector('input[type="password"]')) return [];
       return [...document.querySelectorAll('input,select,textarea')].filter(element => {
         const input = element as HTMLInputElement;
@@ -63,7 +63,7 @@ export class BrowserSession {
         }
       }
       for (const draft of drafts) {
-        const frame = page.frames().find(frame => frame.name() === draft.name);
+        const frame = draft.application ? await this.applicationFrame(page) : page.frames().find(frame => frame.name() === draft.name);
         if (!frame) continue;
         for (const field of draft.fields) {
           const locator = frame.locator(field.selector);
@@ -236,20 +236,23 @@ export class BrowserSession {
       for (const control of view.controls) this.refs.set(control.ref, { frame, locator: frame.locator(`[data-etric-ref="${control.ref}"]`), control });
     }
     this.generation = id;
-    const loginRequired = frames.some(frame => frame.loginRequired) || /\/login\.jsp(?:[;?]|$)/i.test(page.url());
+    const sessionExpired = frames.some(frame => /\bsession\s+(?:has\s+)?expired\b/i.test(frame.text));
+    const loginRequired = sessionExpired || frames.some(frame => frame.loginRequired) || /\/login\.jsp(?:[;?]|$)/i.test(page.url());
+    if (loginRequired) this.capturedMenus = [];
     const title = await page.title();
     // Login opens the real workspace in a new window. It is not a notice.
     const protectedPages = await Promise.all(this.popupPages.map(async popup => !popup.isClosed() && (new URL(popup.url(), this.baseUrl).searchParams.get('actionFlag') === 'doLogin' || await popup.locator('#application').count() > 0)));
     this.popupPages = this.popupPages.filter((popup, index) => !popup.isClosed() && !protectedPages[index]);
-    this.lastView = { snapshotId: id, url: page.url().split('?')[0].replace(/;jsessionid=[^/;?]+/ig, ''), title, frames, loginRequired, loading: !title.trim() && frames.every(frame => !frame.text.trim()), dismissedDialogs: [...this.dismissedDialogs], popupWindows: await Promise.all(this.popupPages.filter(page => !page.isClosed()).map(async (popup, index) => ({ index, title: await popup.title(), url: safeNavigationUrl(popup.url(), this.baseUrl) }))) };
+    this.lastView = { snapshotId: id, url: page.url().split('?')[0].replace(/;jsessionid=[^/;?]+/ig, ''), title, frames, loginRequired, sessionExpired, loading: !title.trim() && frames.every(frame => !frame.text.trim()), dismissedDialogs: [...this.dismissedDialogs], popupWindows: await Promise.all(this.popupPages.filter(page => !page.isClosed()).map(async (popup, index) => ({ index, title: await popup.title(), url: safeNavigationUrl(popup.url(), this.baseUrl) }))) };
     return this.lastView;
   }
   async links(): Promise<object> {
     const view = await this.snapshot();
     const menus: { label: string; path: string[]; url?: string }[] = [];
     const page = await this.ensure();
+    const applicationFrame = await this.applicationFrame(page);
     for (const frame of page.frames()) {
-      if (frame.name() !== 'iframe_Applications') continue;
+      if (frame !== applicationFrame) continue;
       const items = await frame.evaluate(async () => {
         type Item = unknown;
         interface Store { fetch: (request: { query: object; onComplete: (items: Item[]) => void; onError: () => void }) => void; getLabel: (item: Item) => string; getValue: (item: Item, key: string) => unknown; getValues: (item: Item, key: string) => Item[] }
@@ -283,19 +286,27 @@ export class BrowserSession {
     if (menus.length) this.capturedMenus = menus;
     return { snapshotId: view.snapshotId, url: view.url, loginRequired: view.loginRequired, frames: view.frames.map(frame => ({ index: frame.index, name: frame.name, url: frame.url, visible: frame.visible, links: frame.controls.filter(control => !['input', 'textarea', 'select'].includes(control.tag)).map(({ ref, label, id, name, href, navigationUrl, onclick, activation }) => ({ ref, label, id, name, href, navigationUrl, onclick, activation })) })), menus };
   }
+  private async applicationFrame(page: Page): Promise<Frame | undefined> {
+    for (const frame of page.frames()) {
+      if (!frame.parentFrame()) continue;
+      const owner = await frame.frameElement().catch(() => undefined);
+      if (owner && (await owner.getAttribute('id') === 'iframe_Applications' || await owner.getAttribute('name') === 'iframe_Applications')) return frame;
+    }
+    return page.frames().find(frame => frame.name() === 'iframe_Applications');
+  }
   private async waitForApplicationFrame(): Promise<Frame> {
     const page = await this.ensure();
     for (let i = 0; i < 40; i++) {
-      const frame = page.frames().find(item => item.name() === 'iframe_Applications');
+      const frame = await this.applicationFrame(page);
       if (frame && frame.url() !== 'about:blank') return frame;
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     throw new Error('Applications frame did not load. Check the eTRiS session.');
   }
   async sections(): Promise<{ sections: MenuEntry[] }> {
-    if (this.capturedMenus.length) return { sections: this.capturedMenus };
     const view = await this.snapshot();
     if (view.loginRequired) throw new Error('Log in with etric_login before capturing sections.');
+    if (this.capturedMenus.length) return { sections: this.capturedMenus };
     const applications = view.frames.flatMap(frame => frame.controls).find(control => control.id === 'application');
     if (!applications) throw new Error('Applications menu is not available. Open the eTRiS desktop first.');
     await this.click(view.snapshotId, applications.ref);
@@ -311,7 +322,7 @@ export class BrowserSession {
     const { sections } = await this.sections();
     const section = selectSection(sections, name);
     const page = await this.ensure();
-    let frame = page.frames().find(item => item.name() === 'iframe_Applications');
+    let frame = await this.applicationFrame(page);
     if (!frame) {
       const view = await this.snapshot();
       const applications = view.frames.flatMap(item => item.controls).find(control => control.id === 'application');
@@ -372,7 +383,7 @@ export class BrowserSession {
     return this.snapshot();
   }
   async click(snapshotId: string, ref: string, acceptDialog = false): Promise<View> {
-    const { locator, control } = await this.target(snapshotId, ref);
+    const { locator, control, frame } = await this.target(snapshotId, ref);
     this.invalidate();
     const page = await this.ensure();
     // Most dialogs are dismissed. A locally approved write may accept its single confirm dialog.
@@ -381,8 +392,11 @@ export class BrowserSession {
       page.off('dialog', this.dismissDialog); page.on('dialog', accept);
     }
     try {
+      const readUrl = programmeReadUrl(control, this.baseUrl);
+      const detailReady = readUrl ? frame.waitForURL(url => url.origin === readUrl.origin && url.pathname === readUrl.pathname && ['actionFlag', 'notEditable', 'trngPrgTxnId', 'tpPrgMstId'].every(key => !readUrl.searchParams.has(key) || url.searchParams.get(key) === readUrl.searchParams.get(key)), { waitUntil: 'domcontentloaded', timeout: 15000 }).then(() => true, () => false) : undefined;
       if (control.activation === 'double_click') await locator.dblclick({ timeout: 15000 });
       else await locator.click({ timeout: 15000 });
+      if (detailReady && !await detailReady) throw new Error('Programme detail did not load. Inspect the page before retrying.');
       await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
       return await this.snapshot();
     } finally {

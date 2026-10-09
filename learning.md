@@ -28,6 +28,9 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - Hidden frame documents can expose unrendered text or script source through naive `innerText` reads. Skip hidden frames and exclude script/style/template content from visible text collection.
 - Navigation can destroy a frame's execution context before inspection completes. Retry transient reads with a short bound; do not blindly retry writes or authentication.
 - An empty/loading document is not evidence of an authenticated session. Wait for a ready page and inspect its state.
+- **Live-tested and fixed:** an expired workspace can remain visible without a password field. Recognize the visible session-expiry message, mark login required, and clear cached authorized menus. A successful automatic sign-in must clear the failed-attempt guard so a later expiry can recover; unsuccessful attempts remain guarded.
+- **Live-tested and fixed:** programme-number anchors use `onClickColumn` with a view route and `notEditable=Y`. Recognize that exact handler/route instead of treating numeric labels as safe generally. Wait for the selected record's iframe document, not just the desktop's load state, before returning the click result.
+- **Live-tested and fixed:** application frames can acquire a programme title or other runtime name. Find the application frame by its owning iframe element's stable ID/name for navigation, menu capture, and visibility restoration. Runtime frame names can contain account data; do not publish or print them in diagnostics.
 - Page references are temporary. Reinspect after navigation, filling, visibility changes, or other page updates.
 
 ### Popups and write review
@@ -41,7 +44,7 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 ### Validation and publication
 
 - Synthetic CRUD tests verify browser/form mechanics; they do not prove successful writes on the real eTRiS account.
-- Live checks so far validated authentication, authorized menu capture, background navigation, programme listing, and opening the registration screen. Actual programme writes, receipts, attachments, pagination, and lifecycle semantics remain pending.
+- Live checks validated authentication, authorized menu capture, background navigation, programme listing, all three standard detail tabs for each visible programme, and opening the registration screen. Actual programme writes, receipts, attachment reads/downloads, search, multi-page pagination, and lifecycle semantics remain pending.
 - The source destination is the public `ossmalaysia/etric-mcp` repository, superseding the initial private repository request.
 - Runtime credentials/profile/token files live outside the checkout and are ignored defensively. Never copy live values into this log or fixtures.
 - Inspect staged files and run redacted Gitleaks before pushing. Prior scans passed, but each new change still needs its publication check.
@@ -109,3 +112,13 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Validation:** Inspected current handlers, tool descriptions, README, objectives, and prior learning. No implementation change or new runtime test was needed.
 - **Learning:** Communicate readiness per workflow. Keep fixture-tested form mechanics separate from verified account-specific business operations.
 - **Next:** Inspect and map the remaining real forms and lifecycle operations, then validate writes only against a test account or a specifically authorized operation.
+
+### 2026-10-10 — Test all read tools against the connected account
+
+- **Objective:** Test all read tools first, without creating, changing, or deleting real programmes.
+- **Observed:** A cached workspace reported an expired session while status still said login was available. A previous successful auto-login left the retry guard set. Programme links were conservatively routed into local review; clicks could return the old list before the detail iframe loaded. After reading different programmes, the application's runtime frame name changed and returning to the list failed.
+- **Process:** Exercised the real stdio MCP client and shared worker with account values held only in memory. Fixed expiry detection/cache invalidation, cleared the retry guard after successful sign-in, recognized only the exact observed view-only programme link, waited for the selected detail document, and located application frames through their iframe elements. Extended synthetic regressions. A renamed-frame fixture also exposed draft restoration matching by unstable runtime names; corrected it to use application-frame identity. Added an opt-in `npm run test:read` harness with counts-only output, fresh references, selected-title matching, and no business writes. Account navigation can expose cached menu catalogs without a currently loaded Dojo menu; validate visible links separately from the authorized section catalog.
+- **Outcome:** All five registered read-only tools passed, together with section capture/opening, observed-URL navigation, and view-only clicks. The final run read four visible programmes and all 12 Programme Information, Course / Content Outline, and Trainer List tabs, captured a 53-entry authorized catalog, and returned to View My Programme in background mode. These counts are account-specific.
+- **Validation:** Final `npm test`: eight tests passed. Final `npm run test:read`: nine tools/helpers passed, four programme detail reads, 12 detail tabs, background mode, zero programme writes. Documentation file links and the staged diff check passed; a redacted Gitleaks scan of the staged publication found no leaks. The destination was checked as the public OSS Malaysia repository; runtime account data was excluded.
+- **Learning:** Confirm actual detail content and selected-record identity, rather than accepting any returned snapshot as a successful read. Application window/frame names are mutable and potentially private. The live harness must wait through initial loading and report generic failures without logging raw tool results.
+- **Next:** Search, multi-page pagination, attachment reads/downloads, and real create/update/submission/cancellation remain unverified. None of these was promoted to a verified workflow by this read test.

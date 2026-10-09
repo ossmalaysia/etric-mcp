@@ -2,7 +2,7 @@
 
 A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the background during routine use. The user signs in locally; an MCP-compatible assistant can inspect pages, navigate menus, read program tables, prepare program forms, and request save/delete actions.
 
-**Status:** local browser integration. Authenticated navigation to **Applications → Profile Management → Training Programme → View My Programme** has been tested. `etric_sections` captures the current account's authorized menu routes dynamically; `etric_open_section` opens a captured route, and `etric_program_list` opens View My Programme automatically. Form writes, uploads, pagination, and final submission receipts still need account-specific validation. These tools do not provide a direct program database API.
+**Status:** local browser integration. All five read-only MCP tools and four navigation helpers passed a live account check on 2026-10-10: authorized menu capture, programme listing, and all three detail tabs for each visible programme. `etric_sections` captures the current account's authorized menu routes dynamically; `etric_open_section` opens a captured route, and `etric_program_list` opens View My Programme automatically. Form writes, uploads, search, multi-page pagination, and final submission receipts still need account-specific validation. These tools do not provide a direct program database API.
 
 ## Requirements
 
@@ -137,5 +137,15 @@ npm test
 ```
 
 Tests use local synthetic pages and temporary dummy credentials. They never create, update, or delete real eTRiS programs.
+
+To repeat the opt-in live read check against your connected account:
+
+```powershell
+npm run test:read
+```
+
+Start from the authenticated eTRiS desktop in background mode. The check can reuse saved automatic login if the session needs authentication. It tests `etric_session_status`, `etric_page`, `etric_links`, `etric_program_list`, and `etric_program_read`, plus `etric_sections`, `etric_open_section`, `etric_navigate`, and view-only `etric_click` navigation. It matches each visible programme's course title against its detail page, reads Programme Information, Course / Content Outline, and Trainer List, then returns to the list. It tests the current results page only and does not download attachments or submit business forms. Output contains tool names and counts; account records stay in memory.
+
+The 2026-10-10 live check passed with 53 authorized menu entries, four visible programmes, and 12 detail-tab reads, with zero programme writes. Counts depend on the connected account. Eight synthetic regression tests also passed, covering expired-session detection, delayed detail navigation, and application frames whose runtime names change.
 
 This is an independent community project and is not affiliated with HRD Corp.

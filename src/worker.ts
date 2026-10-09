@@ -5,6 +5,7 @@ import { BrowserSession, type Field, type View, type Control } from './browser.j
 import { dataDir, port, tokenFile, profileDir, vaultFile, browserMode } from './config.js';
 import { Vault } from './vault.js';
 import { credentialPage, reviewPage, page } from './ui.js';
+import { programmeReadUrl } from './navigation.js';
 
 export const localResponseHeaders = {
   'Cache-Control': 'no-store',
@@ -19,6 +20,7 @@ const dangerousLabel = /\b(save|submit|delete|remove|withdraw|cancel|approve|rej
 const navigationLabel = /\b(program(me)?s?|management|course|training|application|grant|claim|profile|dashboard|home|menu|list|view|detail|search|filter|next|previous|back|add|new|edit|close|expand|collapse)\b/i;
 export function needsReview(control: Control): boolean {
   if (dangerousLabel.test(control.label)) return true;
+  if (programmeReadUrl(control)) return false;
   if (control.tag === 'a' && control.href && !/^javascript:/i.test(control.href)) return false;
   return !navigationLabel.test(control.label);
 }
@@ -84,7 +86,9 @@ export async function startWorker(): Promise<void> {
           if (attemptedAutoLogin && saved.autoSignIn !== false) return { status: 'login_needs_attention', message: 'An automatic login was already attempted. Check the browser, or call etric_save_login to update credentials locally. No repeated attempts were made.' };
           attemptedAutoLogin = saved.autoSignIn !== false;
           if (saved.autoSignIn === false && session.mode === 'background') await session.setVisibility(true);
-          return session.signIn(saved);
+          const result = await session.signIn(saved);
+          if (result.status === 'login_submitted') attemptedAutoLogin = false;
+          return result;
         }
         return setupCredentials();
       }
@@ -171,7 +175,8 @@ export async function startWorker(): Promise<void> {
           if (!credentials.username || !credentials.password || credentials.username.length > 100 || credentials.password.length > 50) throw new Error('Invalid credentials.');
           if (form.get('save') === 'yes') await vault.save(credentials);
           attemptedAutoLogin = credentials.autoSignIn;
-          await session.signIn(credentials);
+          const result = await session.signIn(credentials);
+          if (result.status === 'login_submitted') attemptedAutoLogin = false;
           respond(res, 200, page('eTRiS login ready', credentials.autoSignIn ? '<h1>Sign-in started</h1><p>Return to the eTRiS tab to check the result and complete any verification.</p>' : '<h1>Login fields are ready</h1><p>Return to the eTRiS tab and click Login. Complete any verification there.</p>'), true);
           if (credentials.autoSignIn && browserMode === 'background') await session.setVisibility(false);
           return;

@@ -19,6 +19,22 @@ export function redactNavigationText(value: string): string {
   return value.replace(/;jsessionid=[^/;?'"\s)]+/ig, '').replace(/([?&](?:token|password|passwd|session|sessionid|jsessionid|ticket|authorization|access_token|refresh_token|csrf|code)=)[^&'"\s)]+/ig, '$1[REDACTED]');
 }
 
+// Recognize the observed view-only programme link, not arbitrary numeric links
+// or JavaScript. Record identifiers remain in memory for this one navigation.
+export function programmeReadUrl(control: { tag: string; onclick?: string }, base = portalUrl): URL | undefined {
+  if (control.tag !== 'a') return undefined;
+  const match = control.onclick?.match(/^\s*onClickColumn\((['"])([^'"\r\n]+)\1\)\s*;?\s*$/);
+  if (!match) return undefined;
+  try {
+    const url = new URL(match[2], base);
+    if (url.origin !== new URL(base).origin || url.username || url.password || url.pathname !== '/DigiGov/digigov.htm') return undefined;
+    if (url.searchParams.getAll('actionFlag').length !== 1 || url.searchParams.get('actionFlag') !== 'getRegisterForProlusForLoad') return undefined;
+    if (url.searchParams.getAll('notEditable').length !== 1 || url.searchParams.get('notEditable') !== 'Y') return undefined;
+    if (url.searchParams.getAll('trngPrgTxnId').length !== 1 || !/^\d+$/.test(url.searchParams.get('trngPrgTxnId') ?? '')) return undefined;
+    return url;
+  } catch { return undefined; }
+}
+
 export interface MenuEntry { label: string; path: string[]; url?: string }
 export function selectSection(entries: MenuEntry[], name: string): MenuEntry {
   const normalized = name.trim().toLowerCase();

@@ -23,6 +23,15 @@ test('navigation origins and review classification', () => {
   assert.equal(needsReview({ ...control, label: 'Delete Program' }), true);
   assert.equal(needsReview({ ...control, label: 'Unrecognized Action' }), true);
   assert.equal(needsReview({ ...control, label: 'Program Management' }), false);
+  const recordLink = { ref: 'test', tag: 'a', type: '', label: '1234567890', onclick: "onClickColumn('digigov.htm?actionFlag=getRegisterForProlusForLoad&trngPrgTxnId=123&notEditable=Y')" };
+  assert.equal(needsReview(recordLink), false);
+  assert.equal(needsReview({ ...recordLink, onclick: recordLink.onclick.replace('notEditable=Y', 'notEditable=N') }), true);
+  assert.equal(needsReview({ ...recordLink, onclick: recordLink.onclick.replace('notEditable=Y', 'notEditable=Y&notEditable=N') }), true);
+  assert.equal(needsReview({ ...recordLink, onclick: recordLink.onclick.replace('getRegisterForProlusForLoad', 'deleteRecord') }), true);
+  assert.equal(needsReview({ ...recordLink, onclick: recordLink.onclick.replace('digigov.htm?', 'https://example.com/DigiGov/digigov.htm?') }), true);
+  assert.equal(needsReview({ ...recordLink, onclick: recordLink.onclick + '; submitRecord()' }), true);
+  assert.equal(needsReview({ ...recordLink, label: 'Submit Programme' }), true);
+  assert.equal(needsReview({ ...recordLink, onclick: undefined }), true);
   assert.equal(escapeHtml('<script>"&'), '&lt;script&gt;&quot;&amp;');
 });
 
@@ -49,7 +58,9 @@ test('Dojo menu capture, section navigation, background mode, and popup dismissa
 const leaf={label:'View My Programme',url:'/programs?actionFlag=fixtureSearch&applicationMstId=1&token=fixture-token'};const root={label:'Applications',children:[{label:'Training Programme',children:[leaf]}]};
 window.continentStore0={fetch:r=>r.onComplete([root]),getLabel:i=>i.label,getValue:(i,k)=>i[k],getValues:(i,k)=>i[k]||[]};</script>`);
     } else if (req.url?.startsWith('/programs')) {
-      res.end(`<title>Programme fixture</title><h1>View My Programme</h1><label for="draft">Draft title</label><input id="draft"><button id="page-close">Close</button><button onclick="document.getElementById('notice').hidden=false">Show notice</button><div id="notice" role="dialog" hidden><p>Fixture notice</p><button onclick="document.getElementById('notice').hidden=true">Dismiss</button></div><button onclick="alert('Dummy notice')">Show alert</button><button onclick="window.open('/popup')">Show popup window</button><button onclick="window.open('/desktop')">Show workspace window</button><table><tr><th>Course Title</th><th>Status</th></tr><tr><td>Dummy course</td><td>Approved</td></tr></table>`);
+      res.end(`<title>Programme fixture</title><h1>View My Programme</h1><a onclick="onClickColumn('/DigiGov/digigov.htm?actionFlag=getRegisterForProlusForLoad&trngPrgTxnId=123&notEditable=Y')">1234567890</a><script>function onClickColumn(url){setTimeout(()=>location.href=url,200)}</script><label for="draft">Draft title</label><input id="draft"><button id="page-close">Close</button><button onclick="document.getElementById('notice').hidden=false">Show notice</button><div id="notice" role="dialog" hidden><p>Fixture notice</p><button onclick="document.getElementById('notice').hidden=true">Dismiss</button></div><button onclick="alert('Dummy notice')">Show alert</button><button onclick="window.open('/popup')">Show popup window</button><button onclick="window.open('/desktop')">Show workspace window</button><table><tr><th>Course Title</th><th>Status</th></tr><tr><td>Dummy course</td><td>Approved</td></tr></table>`);
+    } else if (req.url?.startsWith('/DigiGov/digigov.htm')) {
+      res.end('<title>Programme detail fixture</title><script>window.name="Fixture record title"</script><h1>Programme Information</h1><p>Dummy record detail</p>');
     } else if (req.url === '/hidden') res.end('<p>Hidden fixture content must not be returned</p><script>const hiddenSourceText="Do not expose script source";</script>');
     else res.end('<title>Popup fixture</title><p>Dummy popup</p>');
   });
@@ -67,6 +78,15 @@ window.continentStore0={fetch:r=>r.onComplete([root]),getLabel:i=>i.label,getVal
     assert.ok(!JSON.stringify(catalog).includes('fixture-token'));
     view = await session.openSection('View My Programme');
     assert.ok(view.frames.some(frame => frame.text.includes('Dummy course')));
+    view = await session.click(view.snapshotId, control(view, '1234567890').ref);
+    assert.ok(view.frames.some(frame => frame.text.includes('Dummy record detail')), 'Delayed iframe navigation must finish before returning a detail snapshot');
+    const detailFrame = (await session.ensure()).frames().find(frame => frame.parentFrame() && frame.url().includes('getRegisterForProlusForLoad'))!;
+    assert.equal(await detailFrame.evaluate(() => window.name), 'Fixture record title');
+    // Playwright refreshes the frame name when its next document loads.
+    await detailFrame.goto(detailFrame.url(), { waitUntil: 'domcontentloaded' });
+    assert.equal(detailFrame.name(), 'Fixture record title');
+    view = await session.openSection('View My Programme');
+    assert.ok(view.frames.some(frame => frame.text.includes('Dummy course')), 'List navigation must use the iframe element when a detail page renames its window');
     view = await session.fill(view.snapshotId, [{ ref: control(view, 'Draft title').ref, value: 'Unsaved dummy draft' }]);
     await session.setVisibility(true);
     assert.equal(session.mode, 'visible');
@@ -92,6 +112,16 @@ window.continentStore0={fetch:r=>r.onComplete([root]),getLabel:i=>i.label,getVal
     for (let i = 0; i < 10 && !view.frames.some(frame => frame.controls.some(control => control.id === 'application')); i++) { await new Promise(resolve => setTimeout(resolve, 100)); view = await session.snapshot(); }
     assert.equal(view.popupWindows?.length, 0, 'Workspace windows must not be classified as notices');
     assert.equal((await session.dismissPopup('window') as { status: string }).status, 'no_popup_window');
+    await session.sections();
+    await (await session.ensure()).locator('body').evaluate(body => body.insertAdjacentHTML('beforeend', '<p>Session has expired. Please log in again.</p>'));
+    view = await session.snapshot();
+    assert.equal(view.sessionExpired, true);
+    assert.equal(view.loginRequired, true, 'Expired workspace must not be reported as an available session');
+    await assert.rejects(session.sections(), /Log in/, 'Cached menus must not bypass the login check');
+    await assert.rejects(session.openSection('View My Programme'), /Log in/);
+    await (await session.ensure()).locator('body > p').last().evaluate(element => element.remove());
+    assert.equal((await session.snapshot()).loginRequired, false);
+    assert.equal((await session.sections()).sections.length, 3, 'Authorized menu can be captured again after recovery');
   } finally { await session.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(folder, { recursive: true, force: true }); }
 });
 
