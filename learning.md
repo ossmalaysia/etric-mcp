@@ -52,6 +52,7 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Observed:** npm reported an invalid attestation for transitive `eventsource-parser@3.1.1` despite a clean vulnerability audit. A compatible override to `3.1.0` passes registry/attestation verification. This is a verification failure, not proof of compromise; do not suppress the audit to accept it.
 - Keep local request validation at the worker boundary as well as MCP schemas. Malformed JSON/schema errors can quote supplied values; return generic errors instead. Browser navigation should allow only the portal and the exact local form origin, not arbitrary loopback ports.
 - Workflow YAML parsing is not GitHub expression/context validation. The first hosted bootstrap rejected `runner.temp` at job-level `env`; move it to step-level `env`, and validate workflows with checksum-verified Actionlint locally and in CI.
+- CodeQL's extended file-to-HTTP query reports expected local token authentication even when the destination is loopback. Route worker/test requests through one fixed-origin transport with redirects forbidden. Keep a narrow, documented rule/file/sink exception bound to the whole source hash; leave scanner coverage intact and fail on all unreviewed findings. Hosted Linux browser tests need realistic startup budgets and bounded navigation waits.
 
 ## Task entry template
 

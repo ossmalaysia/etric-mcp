@@ -12,7 +12,7 @@ Use [GitHub private vulnerability reporting](https://github.com/ossmalaysia/etri
 
 The intended deployment is one trusted OS user, one dedicated browser profile, and trusted local MCP clients. The local worker has the authority of the connected eTRiS account. Use the least-privileged account available and review real business actions locally.
 
-- The worker binds to `127.0.0.1`, uses a random 256-bit bearer token with constant-time comparison, checks Host, validates action/argument schemas, and bounds request bodies/headers and input-reading time.
+- The worker binds to `127.0.0.1`, uses a random 256-bit bearer token with constant-time comparison, checks Host, validates action/argument schemas, and bounds request bodies/headers and input-reading time. The client validates its fixed loopback endpoint and refuses redirects so RPC data cannot follow a redirect elsewhere.
 - Browser-based RPC is rejected. Local forms require the exact expected Origin and short-lived tokens. Forms are protected against framing, do not cache responses, and escape displayed values. No CORS access is enabled.
 - Saved credentials use Windows DPAPI CurrentUser. Passwords enter a local form and travel to the encryption helper through stdin; they are not MCP arguments or command-line arguments. Login fields and malformed-input details are excluded from tool responses.
 - Browser document navigation is restricted to the portal origin and this worker's exact local origin, including its port. Unrelated loopback services are blocked. Portal subresources are not a general network sandbox.
@@ -34,7 +34,7 @@ The [CI workflow](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/wor
 | Check | Coverage |
 | --- | --- |
 | Gitleaks | All fetched Git history and a separate snapshot of every tracked file, including docs, fixtures, and configuration. Logs redact detected secrets. |
-| CodeQL | JavaScript/TypeScript source and GitHub Actions workflows; extended security queries for JavaScript. Any reported finding fails the pipeline. |
+| CodeQL | JavaScript/TypeScript source and GitHub Actions workflows; extended security queries for JavaScript. Every unreviewed finding fails the pipeline; the exact local-authentication exception below remains visible in scanner results. |
 | Dependency integrity | Locked install without lifecycle scripts, vulnerability audit including dev dependencies, registry signature and available attestation verification. Any known vulnerability or verification error fails. |
 | Repository policy | Required public project files, documentation links, JSON validity, forbidden runtime-file paths, approved actions pinned to complete commit SHAs. |
 | Synthetic regressions | Windows and Linux on Node 22/24; Windows includes real DPAPI tests with dummy credentials. No live portal credentials are available in CI. |
@@ -46,6 +46,10 @@ Tools have limits: pattern scanners can miss secrets and account data, not every
 ## Dependency verification exception prevention
 
 `eventsource-parser` is pinned through an override to `3.1.0`: the previously resolved `3.1.1` failed npm attestation verification on 2026-10-10. The replacement passes registry signatures and available attestations and satisfies the SDK's dependency range. This failure is not proof of compromise. Re-evaluate the override when upstream verification is resolved; do not disable signature auditing to accept an update.
+
+## Reviewed code scanning flow
+
+CodeQL's extended `js/file-access-to-http` query flags file data sent in any network request, including the bearer token read from this worker's local token file and sent to its loopback authentication endpoint. The transport validates the port and origin and refuses redirects; synthetic tests verify endpoint/redirect rejection. This expected authentication flow is recorded in [.github/codeql-reviewed.json](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/codeql-reviewed.json), restricted to one rule, file, and sink line, and bound to the SHA-256 of the entire normalized transport source. Changing that source invalidates the exception and fails the gate until reviewed. No query, source directory, or test file is excluded from CodeQL; all other results fail. New or changed exceptions need explicit security rationale and normal required PR review.
 
 ## Release pipeline
 

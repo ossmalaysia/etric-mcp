@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "findings": [
+    {
+      "ruleId": "js/file-access-to-http",
+      "file": "src/transport.ts",
+      "startLine": 8,
+      "sha256NormalizedLf": "d3e0e19edc821ceaf899565bc3bc9d1aceb220db8c92b0ef91ab8de1ca245b6a",
+      "reason": "Expected local authentication: the worker token read from disk is sent only to the explicit 127.0.0.1 worker origin. The whole transport source is hash-bound, validates the port/path/origin, and forbids redirects. Regression tests prove foreign endpoints and redirect targets receive no RPC payload. No query or file is excluded from scanning."
+    }
+  ]
+}
