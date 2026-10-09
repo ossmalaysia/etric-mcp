@@ -9,6 +9,8 @@ export const portalOrigin = new URL(portalUrl).origin;
 export const tokenFile = path.join(dataDir, 'worker-token');
 export const profileDir = path.join(dataDir, 'browser');
 export const vaultFile = path.join(dataDir, 'credentials.dpapi');
+export const browserMode = process.env.ETRIC_BROWSER_MODE ?? 'background';
+if (!['background', 'visible'].includes(browserMode)) throw new Error('ETRIC_BROWSER_MODE must be background or visible.');
 
 export function allowedUrl(value: string): string {
   const url = new URL(value, portalUrl);

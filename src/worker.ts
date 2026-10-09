@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { BrowserSession, type Field, type View, type Control } from './browser.js';
-import { dataDir, port, tokenFile, profileDir, vaultFile } from './config.js';
+import { dataDir, port, tokenFile, profileDir, vaultFile, browserMode } from './config.js';
 import { Vault } from './vault.js';
 import { credentialPage, reviewPage, page } from './ui.js';
 
@@ -28,7 +28,7 @@ export function fingerprint(view: View): string {
 
 export async function startWorker(): Promise<void> {
   const token = randomBytes(32).toString('hex');
-  const session = new BrowserSession(profileDir);
+  const session = new BrowserSession(profileDir, undefined, undefined, browserMode === 'background');
   const vault = new Vault(vaultFile);
   const localOrigin = `http://127.0.0.1:${port}`;
   const credentialTokens = new Map<string, number>();
@@ -44,6 +44,7 @@ export async function startWorker(): Promise<void> {
     return { status: 'local_credential_form_open', message: 'Enter credentials in the local browser form and click Connect to eTRiS. Saved credentials will be reused. No credentials are accepted through MCP.' };
   }
   async function review(snapshotId: string, ref: string, action: string): Promise<object> {
+    const originalMode = session.mode;
     const control = await session.control(snapshotId, ref);
     const previous = session.cachedView(snapshotId);
     const selectedFrame = previous.frames.find(frame => frame.controls.some(item => item.ref === ref))!;
@@ -58,12 +59,15 @@ export async function startWorker(): Promise<void> {
     try {
       reviewTab = await session.openLocal(`${localOrigin}/review?token=${secret}`);
       if (!await decision) return { status: 'cancelled', message: 'The local action review was cancelled or expired. Nothing was clicked.' };
+      await reviewTab.close(); reviewTab = undefined;
+      if (originalMode === 'background') await session.setVisibility(false);
       const current = await session.snapshot();
-      if (fingerprint(previous) !== fingerprint(current)) throw new Error('The eTRiS page changed during review. Inspect it and request the action again.');
+      const currentFrame = current.frames.find(frame => frame.index === selectedFrame.index);
+      if (!currentFrame || fingerprint({ ...previous, frames: [selectedFrame] }) !== fingerprint({ ...current, frames: [currentFrame] })) throw new Error('The eTRiS page changed during review. Inspect it and request the action again.');
       const currentRef = current.frames.find(frame => frame.index === selectedFrame.index)!.controls[index].ref;
       const result = await session.click(current.snapshotId, currentRef, true);
       return { status: 'action_clicked', message: 'Inspect the returned page for eTRiS success or validation errors. This is not a verified success receipt.', requestedAction: action, selectedControl: control.label, page: result };
-    } finally { clearTimeout(timer); approvals.delete(secret); await reviewTab?.close().catch(() => {}); }
+    } finally { clearTimeout(timer); approvals.delete(secret); await reviewTab?.close().catch(() => {}); if (originalMode === 'background') await session.setVisibility(false); }
   }
   async function execute(action: string, args: Record<string, unknown>): Promise<unknown> {
     const snapshotId = args.snapshotId as string;
@@ -71,13 +75,15 @@ export async function startWorker(): Promise<void> {
     switch (action) {
       case 'login': {
         await session.openLogin();
-        const view = await session.snapshot();
+        let view = await session.snapshot();
+        for (let attempt = 0; view.loading && attempt < 15; attempt++) { await new Promise(resolve => setTimeout(resolve, 200)); view = await session.snapshot(); }
         if (view.loading) return { status: 'page_loading', message: 'The eTRiS page is still loading. Call etric_login again once the page appears.' };
         if (!view.loginRequired) { attemptedAutoLogin = false; return { status: 'session_available', page: view }; }
         const saved = await vault.load();
         if (saved) {
           if (attemptedAutoLogin && saved.autoSignIn !== false) return { status: 'login_needs_attention', message: 'An automatic login was already attempted. Check the browser, or call etric_save_login to update credentials locally. No repeated attempts were made.' };
           attemptedAutoLogin = saved.autoSignIn !== false;
+          if (saved.autoSignIn === false && session.mode === 'background') await session.setVisibility(true);
           return session.signIn(saved);
         }
         return setupCredentials();
@@ -98,8 +104,13 @@ export async function startWorker(): Promise<void> {
           return { status: 'forgotten' };
         } finally { clearTimeout(timer); approvals.delete(secret); await tab.close().catch(() => {}); }
       }
-      case 'status': return { browser: await session.snapshot(), passwordSaved: await vault.exists() };
+      case 'status': return { browser: await session.snapshot(), mode: session.mode, passwordSaved: await vault.exists() };
       case 'page': return session.snapshot();
+      case 'links': return session.links();
+      case 'sections': return session.sections();
+      case 'open_section': return session.openSection(args.name as string);
+      case 'browser_mode': return session.setVisibility(args.visible as boolean);
+      case 'dismiss_popup': return session.dismissPopup((args.kind as 'notice' | 'window') ?? 'notice', args.snapshotId as string | undefined, args.ref as string | undefined);
       case 'navigate': return session.navigate(args.url as string);
       case 'click': {
         const control = await session.control(snapshotId, ref);
@@ -110,7 +121,8 @@ export async function startWorker(): Promise<void> {
         const view = await session.fill(snapshotId, args.fields as Field[]);
         return { status: 'form_prepared', message: 'Fields are filled. No save or submit button was clicked. Inspect the form, then use etric_program_save.', page: view };
       }
-      case 'program_list': case 'program_read': return session.snapshot();
+      case 'program_list': return session.openSection('View My Programme');
+      case 'program_read': return session.snapshot();
       case 'program_save': case 'program_delete': {
         const control = await session.control(snapshotId, ref);
         const expected = action === 'program_delete' ? /\b(delete|remove)\b/i : /\b(save|submit|update|create|confirm|register)\b/i;
@@ -123,6 +135,7 @@ export async function startWorker(): Promise<void> {
     }
   }
   function respond(res: ServerResponse, code: number, content: unknown, html = false): void {
+    if (res.writableEnded) return;
     res.writeHead(code, { ...localResponseHeaders, 'Content-Type': html ? 'text/html; charset=utf-8' : 'application/json' });
     res.end(html ? content as string : JSON.stringify(content));
   }
@@ -159,7 +172,9 @@ export async function startWorker(): Promise<void> {
           if (form.get('save') === 'yes') await vault.save(credentials);
           attemptedAutoLogin = credentials.autoSignIn;
           await session.signIn(credentials);
-          return respond(res, 200, page('eTRiS login ready', credentials.autoSignIn ? '<h1>Sign-in started</h1><p>Return to the eTRiS tab to check the result and complete any verification.</p>' : '<h1>Login fields are ready</h1><p>Return to the eTRiS tab and click Login. Complete any verification there.</p>'), true);
+          respond(res, 200, page('eTRiS login ready', credentials.autoSignIn ? '<h1>Sign-in started</h1><p>Return to the eTRiS tab to check the result and complete any verification.</p>' : '<h1>Login fields are ready</h1><p>Return to the eTRiS tab and click Login. Complete any verification there.</p>'), true);
+          if (credentials.autoSignIn && browserMode === 'background') await session.setVisibility(false);
+          return;
         } finally { busy = false; }
       }
       if (req.method === 'GET' && url.pathname === '/credentials') {
@@ -182,7 +197,7 @@ export async function startWorker(): Promise<void> {
           return respond(res, 200, { result });
         } catch (error) {
           // Avoid returning Playwright exceptions which can contain input values.
-          const message = error instanceof Error && !error.name.includes('Timeout') && !/locator\.|page\./i.test(error.message) ? error.message : 'Browser action failed. Inspect the page and retry; do not assume it succeeded.';
+          const message = error instanceof Error && !error.name.includes('Timeout') && !/locator\.|page\.|frame\./i.test(error.message) ? error.message : 'Browser action failed. Inspect the page and retry; do not assume it succeeded.';
           return respond(res, 400, { error: message });
         } finally { busy = false; }
       }

@@ -13,6 +13,7 @@ import { Vault } from '../vault.js';
 import { allowedUrl } from '../config.js';
 import { needsReview, fingerprint, localResponseHeaders } from '../worker.js';
 import { escapeHtml, credentialPage, reviewPage } from '../ui.js';
+import { safeNavigationUrl, selectSection } from '../navigation.js';
 
 test('navigation origins and review classification', () => {
   assert.equal(new URL(allowedUrl('/DigiGov/login.jsp')).hostname, 'etris.hrdcorp.gov.my');
@@ -23,6 +24,75 @@ test('navigation origins and review classification', () => {
   assert.equal(needsReview({ ...control, label: 'Unrecognized Action' }), true);
   assert.equal(needsReview({ ...control, label: 'Program Management' }), false);
   assert.equal(escapeHtml('<script>"&'), '&lt;script&gt;&quot;&amp;');
+});
+
+test('captured routes retain navigation parameters and remove secrets and record identifiers', () => {
+  const route = safeNavigationUrl('digigov.htm;jsessionid=fixture-session?actionFlag=fixtureSearch&applicationMstId=1&elementId=2&token=fixture-token&userId=fixture-account&recordId=fixture-record');
+  assert.ok(route);
+  assert.equal(new URL(route).searchParams.get('applicationMstId'), '1');
+  assert.equal(new URL(route).searchParams.get('elementId'), '2');
+  for (const value of ['fixture-session', 'fixture-token', 'fixture-account', 'fixture-record']) assert.ok(!route.includes(value));
+  assert.equal(safeNavigationUrl('https://example.com/'), undefined);
+  const entries = [{ label: 'View My Programme', path: ['Applications', 'Training Programme', 'View My Programme'], url: route }];
+  assert.equal(selectSection(entries, 'view my programme').url, route);
+  assert.throws(() => selectSection([...entries, ...entries], 'View My Programme'), /ambiguous/);
+});
+
+test('Dojo menu capture, section navigation, background mode, and popup dismissal', { timeout: 60000 }, async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    if (req.url?.startsWith('/desktop')) {
+      res.setHeader('Set-Cookie', 'fixture_session=dummy; Path=/; HttpOnly');
+      res.end(`<title>Desktop fixture</title><a id="application" href="#apps" onclick="document.getElementById('apps').innerHTML='<iframe name=iframe_Applications src=/menu></iframe>'">Applications</a><div id="apps"></div><iframe src="/hidden" style="display:none"></iframe>`);
+    } else if (req.url?.startsWith('/menu')) {
+      res.end(`<title>Menu fixture</title><span role="treeitem">Training Programme</span><script>
+const leaf={label:'View My Programme',url:'/programs?actionFlag=fixtureSearch&applicationMstId=1&token=fixture-token'};const root={label:'Applications',children:[{label:'Training Programme',children:[leaf]}]};
+window.continentStore0={fetch:r=>r.onComplete([root]),getLabel:i=>i.label,getValue:(i,k)=>i[k],getValues:(i,k)=>i[k]||[]};</script>`);
+    } else if (req.url?.startsWith('/programs')) {
+      res.end(`<title>Programme fixture</title><h1>View My Programme</h1><label for="draft">Draft title</label><input id="draft"><button id="page-close">Close</button><button onclick="document.getElementById('notice').hidden=false">Show notice</button><div id="notice" role="dialog" hidden><p>Fixture notice</p><button onclick="document.getElementById('notice').hidden=true">Dismiss</button></div><button onclick="alert('Dummy notice')">Show alert</button><button onclick="window.open('/popup')">Show popup window</button><button onclick="window.open('/desktop')">Show workspace window</button><table><tr><th>Course Title</th><th>Status</th></tr><tr><td>Dummy course</td><td>Approved</td></tr></table>`);
+    } else if (req.url === '/hidden') res.end('<p>Hidden fixture content must not be returned</p><script>const hiddenSourceText="Do not expose script source";</script>');
+    else res.end('<title>Popup fixture</title><p>Dummy popup</p>');
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'etric-navigation-test-'));
+  const session = new BrowserSession(path.join(folder, 'browser'), `${origin}/desktop`, origin, true);
+  try {
+    assert.equal(session.mode, 'background');
+    let view = await session.navigate(`${origin}/desktop`);
+    assert.ok(!JSON.stringify(view).includes('Hidden fixture content'));
+    assert.ok(!JSON.stringify(view).includes('Do not expose script source'));
+    const catalog = await session.sections();
+    assert.equal(catalog.sections.length, 3);
+    assert.ok(!JSON.stringify(catalog).includes('fixture-token'));
+    view = await session.openSection('View My Programme');
+    assert.ok(view.frames.some(frame => frame.text.includes('Dummy course')));
+    view = await session.fill(view.snapshotId, [{ ref: control(view, 'Draft title').ref, value: 'Unsaved dummy draft' }]);
+    await session.setVisibility(true);
+    assert.equal(session.mode, 'visible');
+    await session.setVisibility(false);
+    assert.equal(session.mode, 'background');
+    view = await session.snapshot();
+    assert.equal(control(view, 'Draft title').value, 'Unsaved dummy draft');
+    const browserPage = await session.ensure();
+    assert.ok((await browserPage.context().cookies()).some(cookie => cookie.name === 'fixture_session'));
+    await assert.rejects(session.dismissPopup('notice', view.snapshotId, control(view, 'Close').ref), /not a recognized/);
+    view = await session.click(view.snapshotId, control(view, 'Show notice').ref);
+    assert.equal((await session.dismissPopup('notice', view.snapshotId, control(view, 'Dismiss').ref) as { status: string }).status, 'notice_dismissed');
+    view = await session.snapshot();
+    view = await session.click(view.snapshotId, control(view, 'Show alert').ref);
+    assert.ok(view.dismissedDialogs?.includes('alert dismissed'));
+    view = await session.click(view.snapshotId, control(view, 'Show popup window').ref);
+    for (let i = 0; i < 10 && !view.popupWindows?.length; i++) { await new Promise(resolve => setTimeout(resolve, 100)); view = await session.snapshot(); }
+    assert.equal(view.popupWindows?.length, 1);
+    assert.equal((await session.dismissPopup('window') as { status: string }).status, 'popup_window_closed');
+    view = await session.snapshot();
+    assert.ok(view.frames.some(frame => frame.text.includes('View My Programme')));
+    view = await session.click(view.snapshotId, control(view, 'Show workspace window').ref);
+    for (let i = 0; i < 10 && !view.frames.some(frame => frame.controls.some(control => control.id === 'application')); i++) { await new Promise(resolve => setTimeout(resolve, 100)); view = await session.snapshot(); }
+    assert.equal(view.popupWindows?.length, 0, 'Workspace windows must not be classified as notices');
+    assert.equal((await session.dismissPopup('window') as { status: string }).status, 'no_popup_window');
+  } finally { await session.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(folder, { recursive: true, force: true }); }
 });
 
 test('Windows vault encrypts and round-trips dummy credentials', { skip: process.platform !== 'win32' }, async () => {
@@ -115,7 +185,7 @@ test('stdio client discovers tools without starting a browser or accepting passw
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    for (const name of ['etric_login', 'etric_save_login', 'etric_program_create', 'etric_program_read', 'etric_program_update', 'etric_program_delete']) assert.ok(tools.some(tool => tool.name === name));
+    for (const name of ['etric_login', 'etric_save_login', 'etric_program_create', 'etric_program_read', 'etric_program_update', 'etric_program_delete', 'etric_links', 'etric_sections', 'etric_open_section', 'etric_browser_visibility', 'etric_dismiss_popup']) assert.ok(tools.some(tool => tool.name === name));
     for (const tool of tools) assert.ok(!Object.keys(tool.inputSchema.properties ?? {}).some(key => /password|username/i.test(key)));
     const invalid = await client.callTool({ name: 'etric_fill', arguments: { snapshotId: 'invalid', fields: [] } });
     assert.equal(invalid.isError, true);
