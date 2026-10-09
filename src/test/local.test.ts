@@ -11,8 +11,8 @@ import { createServer, request as httpRequest } from 'node:http';
 import { BrowserSession, type View } from '../browser.js';
 import { Vault } from '../vault.js';
 import { allowedUrl } from '../config.js';
-import { needsReview, fingerprint } from '../worker.js';
-import { escapeHtml } from '../ui.js';
+import { needsReview, fingerprint, localResponseHeaders } from '../worker.js';
+import { escapeHtml, credentialPage, reviewPage } from '../ui.js';
 
 test('navigation origins and review classification', () => {
   assert.equal(new URL(allowedUrl('/DigiGov/login.jsp')).hostname, 'etris.hrdcorp.gov.my');
@@ -120,6 +120,50 @@ test('stdio client discovers tools without starting a browser or accepting passw
     const invalid = await client.callTool({ name: 'etric_fill', arguments: { snapshotId: 'invalid', fields: [] } });
     assert.equal(invalid.isError, true);
   } finally { await client.close(); }
+});
+
+test('native browser login and review forms preserve a valid Origin without leaking URL tokens', { timeout: 30000 }, async () => {
+  let origin = '';
+  const submissions: { origin?: string; referer?: string; path: string }[] = [];
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', origin);
+    if (req.method === 'GET') {
+      res.writeHead(200, { ...localResponseHeaders, 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(url.pathname === '/credentials' ? credentialPage('fixture-form-token') : reviewPage('fixture-form-token', 'fixture action', 'Dummy program preview'));
+    } else {
+      submissions.push({ origin: req.headers.origin, referer: req.headers.referer, path: url.pathname });
+      req.resume();
+      res.writeHead(req.headers.origin === origin ? 200 : 403, { 'Content-Type': 'text/html' });
+      res.end(req.headers.origin === origin ? '<p>Fixture form accepted</p>' : '<p>Invalid Origin.</p>');
+    }
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'etric-form-test-'));
+  const session = new BrowserSession(path.join(folder, 'browser'), `${origin}/credentials`, origin, true);
+  try {
+    const browserPage = await session.ensure();
+    await browserPage.goto(`${origin}/credentials?token=fixture-url-token`);
+    await browserPage.locator('#username').fill('fixture-user');
+    await browserPage.locator('#password').fill('dummy-password-for-test-only');
+    const [loginResponse] = await Promise.all([
+      browserPage.waitForResponse(response => response.request().method() === 'POST'),
+      browserPage.getByRole('button', { name: 'Connect to eTRiS' }).click()
+    ]);
+    assert.equal(loginResponse.status(), 200, 'The real browser credential form must pass origin validation');
+    await browserPage.goto(`${origin}/review?token=fixture-url-token`);
+    const [reviewResponse] = await Promise.all([
+      browserPage.waitForResponse(response => response.request().method() === 'POST'),
+      browserPage.getByRole('button', { name: 'Approve this action' }).click()
+    ]);
+    assert.equal(reviewResponse.status(), 200, 'The real browser review form must pass origin validation');
+    assert.deepEqual(submissions.map(item => item.path), ['/credentials', '/decision']);
+    for (const submission of submissions) {
+      assert.equal(submission.origin, origin);
+      assert.equal(submission.referer, `${origin}/`);
+      assert.ok(!submission.referer?.includes('fixture-url-token'));
+    }
+  } finally { await session.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(folder, { recursive: true, force: true }); }
 });
 
 test('local worker rejects unauthorized, cross-origin, and oversized requests', { timeout: 25000 }, async () => {

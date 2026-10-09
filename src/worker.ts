@@ -6,6 +6,15 @@ import { dataDir, port, tokenFile, profileDir, vaultFile } from './config.js';
 import { Vault } from './vault.js';
 import { credentialPage, reviewPage, page } from './ui.js';
 
+export const localResponseHeaders = {
+  'Cache-Control': 'no-store',
+  // Native form POSTs use Origin: null under no-referrer. Preserve the origin
+  // for validation while excluding the page path and token from Referer.
+  'Referrer-Policy': 'strict-origin',
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+};
+
 const dangerousLabel = /\b(save|submit|delete|remove|withdraw|cancel|approve|reject|confirm|register|pay|payment|upload|send|finali[sz]e)\b/i;
 const navigationLabel = /\b(program(me)?s?|management|course|training|application|grant|claim|profile|dashboard|home|menu|list|view|detail|search|filter|next|previous|back|add|new|edit|close|expand|collapse)\b/i;
 export function needsReview(control: Control): boolean {
@@ -114,7 +123,7 @@ export async function startWorker(): Promise<void> {
     }
   }
   function respond(res: ServerResponse, code: number, content: unknown, html = false): void {
-    res.writeHead(code, { 'Content-Type': html ? 'text/html; charset=utf-8' : 'application/json', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" });
+    res.writeHead(code, { ...localResponseHeaders, 'Content-Type': html ? 'text/html; charset=utf-8' : 'application/json' });
     res.end(html ? content as string : JSON.stringify(content));
   }
   async function body(req: IncomingMessage): Promise<string> {
