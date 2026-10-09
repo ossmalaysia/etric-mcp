@@ -3,7 +3,9 @@ import { readFile, access } from 'node:fs/promises';
 import path from 'node:path';
 
 const required = ['LICENSE', 'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', '.github/CODEOWNERS', '.github/dependabot.yml', '.github/workflows/ci.yml', '.github/PULL_REQUEST_TEMPLATE.md', '.github/ISSUE_TEMPLATE/bug.yml'];
-const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+// Use a fixed executable location so an untrusted PATH cannot select a fake Git.
+const gitBinary = process.platform === 'win32' ? 'C:/Program Files/Git/cmd/git.exe' : '/usr/bin/git';
+const tracked = execFileSync(gitBinary, ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
 let failures = 0;
 function reject(message) { console.error(message); failures++; }
 for (const file of required) { try { await access(file); } catch { reject(`Required public project file missing: ${file}`); } }

@@ -53,6 +53,7 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - Keep local request validation at the worker boundary as well as MCP schemas. Malformed JSON/schema errors can quote supplied values; return generic errors instead. Browser navigation should allow only the portal and the exact local form origin, not arbitrary loopback ports.
 - Workflow YAML parsing is not GitHub expression/context validation. The first hosted bootstrap rejected `runner.temp` at job-level `env`; move it to step-level `env`, and validate workflows with checksum-verified Actionlint locally and in CI.
 - CodeQL's extended file-to-HTTP query reports expected local token authentication even when the destination is loopback. Route worker/test requests through one fixed-origin transport with redirects forbidden. Keep a narrow, documented rule/file/sink exception bound to the whole source hash; leave scanner coverage intact and fail on all unreviewed findings. Hosted Linux browser tests need realistic startup budgets and bounded navigation waits.
+- Resolve SARIF artifact URIs against their declared source base; raw reports can use absolute file URIs while GitHub's API presents relative paths. Do not broaden a reviewed exception to arbitrary paths. The organization's SonarCloud integration also scans this public repo; a PATH-based Git invocation in the policy script was replaced with fixed standard executable paths.
 
 ## Task entry template
 

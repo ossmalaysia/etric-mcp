@@ -1,6 +1,16 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+function locationFile(run, location) {
+  const artifact = location?.artifactLocation;
+  if (!artifact?.uri) return undefined;
+  try {
+    const base = run.originalUriBaseIds?.[artifact.uriBaseId]?.uri ?? pathToFileURL(path.resolve('.') + path.sep).href;
+    return path.resolve(fileURLToPath(new URL(artifact.uri, base)));
+  } catch { return undefined; }
+}
 
 async function files(folder) {
   const result = [];
@@ -33,7 +43,7 @@ try {
         const locations = result.locations;
         if (locations?.length !== 1) continue;
         const location = locations[0]?.physicalLocation;
-        if (reviewed.findings.some(entry => entry.ruleId === result.ruleId && location?.artifactLocation?.uri === entry.file && location?.region?.startLine === entry.startLine && location?.region?.endLine === entry.startLine)) accepted++;
+        if (reviewed.findings.some(entry => entry.ruleId === result.ruleId && locationFile(run, location) === path.resolve(entry.file) && location?.region?.startLine === entry.startLine && (location?.region?.endLine ?? location?.region?.startLine) === entry.startLine)) accepted++;
       }
     }
   }
