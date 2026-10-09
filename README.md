@@ -158,4 +158,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CODE_OF
 
 The protected default branch requires passing checks and review. Actions use full commit SHAs, minimal token permissions, and no saved checkout credentials. Dependabot proposes dependency/action updates; GitHub secret scanning and push protection help prevent published secrets. Passing scans does not establish a security certification; the trust boundaries and scan limits are documented in the security policy.
 
+The CI bootstrap passed all four Windows/Linux Node 22/24 combinations, with eleven regression tests on Windows and a DPAPI skip on Linux. Source/workflow CodeQL gates have no unreviewed findings; the expected loopback authentication flow has one exact, hash-bound exception documented in the security policy. SonarCloud's security gate also passes. Merges require an approving code owner: your own PR needs another eligible reviewer. Have a trusted maintainer with Write access propose adding their username to `.github/CODEOWNERS`, then review that PR to establish a second code owner.
+
 Matching version tags can build an allowlisted runtime ZIP and SHA-256 digest after the checks pass. The workflow retains it as an Actions artifact; npm publication and remote deployment are outside this local project. No release tag is created automatically.

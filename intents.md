@@ -36,6 +36,8 @@ Allow an authorized user to operate HRD Corp eTRiS through an MCP-compatible ass
 - Opening **Applications → Profile Management → Training Programme → View My Programme** and the registration screen without submitting forms.
 - Synthetic tests for form CRUD, fresh references, hidden-frame handling, popup dismissal, workspace protection, visibility changes, and session-cookie retention.
 - Eight automated tests passed at the most recent behavior update. The full source history passed a redacted Gitleaks scan.
+- The security update has eleven local regression tests and passing hosted Windows/Linux Node 22/24 CI. Hosted checks cover all tracked files and fetched history for secrets, dependency vulnerabilities/signatures/available attestations, JavaScript/TypeScript and Actions CodeQL, workflow lint, and repository policy. SonarCloud's security gate also passed. One expected local authentication flow has a narrow source-hash-bound review; other findings fail.
+- GitHub secret scanning, push protection, dependency security updates, and private vulnerability reporting are enabled. Secure maintenance uses required checks and independent code-owner review after the initial CI bootstrap.
 
 These are historical verification results, not a substitute for checking the current implementation and session.
 
