@@ -99,3 +99,13 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Validation:** All relative documentation links resolved, the staged diff check passed, and the redacted Gitleaks scan found no leaks. No browser restart or unrelated test rerun was needed for this documentation-only task.
 - **Learning:** Keep objectives, agent instructions, and evidence separate but linked. Store actionable lessons and verification boundaries instead of raw transcripts.
 - **Next:** None for this documentation task; remaining implementation acceptance criteria are tracked in `intents.md`.
+
+### 2026-10-10 — Clarify programme tool readiness
+
+- **Objective:** Confirm whether all programme-management tools are working on the real portal.
+- **Observed:** The tool handlers show that listing opens the captured View My Programme route, reading snapshots the current page, create/update fill an already-open form, and save/delete click a selected control after review. The live menu exposes a programme cancellation request route, which is not yet mapped to a complete cancellation workflow.
+- **Process:** Compared the implementation with the recorded live and synthetic validation evidence. Did not restart the browser or perform any real programme mutation for this status question.
+- **Outcome:** Login, background navigation, menu capture, and programme listing are live-verified. Detail navigation, account-specific create/update forms, actual submission outcomes, and deletion/cancellation semantics are not fully validated. The existence of named tools does not establish complete live CRUD support.
+- **Validation:** Inspected current handlers, tool descriptions, README, objectives, and prior learning. No implementation change or new runtime test was needed.
+- **Learning:** Communicate readiness per workflow. Keep fixture-tested form mechanics separate from verified account-specific business operations.
+- **Next:** Inspect and map the remaining real forms and lifecycle operations, then validate writes only against a test account or a specifically authorized operation.
