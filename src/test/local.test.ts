@@ -14,6 +14,48 @@ import { allowedUrl } from '../config.js';
 import { needsReview, fingerprint, localResponseHeaders } from '../worker.js';
 import { escapeHtml, credentialPage, reviewPage } from '../ui.js';
 import { safeNavigationUrl, selectSection } from '../navigation.js';
+import { parseWorkerRequest, hasBearerToken } from '../security.js';
+import { loopbackRequest } from '../transport.js';
+
+test('worker validates arguments and does not echo malformed input', () => {
+  assert.deepEqual(parseWorkerRequest('{"action":"status"}'), { action: 'status', args: {} });
+  for (const input of ['{"action":"status","args":{"password":"fixture-sensitive"}}', '{"action":"navigate","args":{"url":1}}', '{"action":"click","args":{"snapshotId":"invalid","ref":"x"}}', '{"action":"unknown"}', '{"action":"toString"}', '{"password":"fixture-sensitive"', 'null']) {
+    assert.throws(() => parseWorkerRequest(input), error => error instanceof Error && !error.message.includes('fixture-sensitive') && error.message.startsWith('Invalid local request.'));
+  }
+  assert.equal(hasBearerToken('Bearer fixture-token', 'fixture-token'), true);
+  for (const header of [undefined, 'fixture-token', 'Bearer wrong', 'Bearer fixture-token-extra']) assert.equal(hasBearerToken(header, 'fixture-token'), false);
+});
+
+test('browser blocks navigation to unrelated loopback services', { timeout: 60000 }, async () => {
+  let unrelatedHits = 0;
+  const portal = createServer((_req, res) => res.end('<title>Fixture portal</title><p>Fixture page</p>'));
+  const unrelated = createServer((_req, res) => { unrelatedHits++; res.end('<p>Unrelated service</p>'); });
+  await Promise.all([portal, unrelated].map(server => new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))));
+  const origin = `http://127.0.0.1:${(portal.address() as { port: number }).port}`;
+  const forbidden = `http://127.0.0.1:${(unrelated.address() as { port: number }).port}`;
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'etric-origin-test-'));
+  const session = new BrowserSession(path.join(folder, 'browser'), origin, origin, true);
+  try {
+    await session.navigate(origin);
+    await assert.rejects(session.openLocal(forbidden), /Unsupported local form origin/);
+    await assert.rejects((await session.ensure()).goto(forbidden, { timeout: 10000 }), /ERR_FAILED|ERR_ABORTED/);
+    assert.equal(unrelatedHits, 0, 'Navigation must be blocked before reaching an unrelated local service');
+  } finally { await session.close(); await Promise.all([portal, unrelated].map(server => new Promise<void>(resolve => server.close(() => resolve())))); await rm(folder, { recursive: true, force: true }); }
+});
+
+test('worker transport rejects foreign endpoints and does not follow redirects', async () => {
+  let targetHits = 0;
+  const target = createServer((_req, res) => { targetHits++; res.end('{}'); });
+  await new Promise<void>(resolve => target.listen(0, '127.0.0.1', resolve));
+  const redirect = createServer((_req, res) => { res.writeHead(307, { Location: `http://127.0.0.1:${(target.address() as { port: number }).port}/` }); res.end(); });
+  await new Promise<void>(resolve => redirect.listen(0, '127.0.0.1', resolve));
+  const localPort = (redirect.address() as { port: number }).port;
+  try {
+    for (const requestPath of ['https://example.com/', '//example.com/', '/\\example.com/']) await assert.rejects(loopbackRequest(localPort, requestPath), /Invalid local worker endpoint/);
+    await assert.rejects(loopbackRequest(localPort, '/rpc', { method: 'POST', body: 'fixture-private-data', timeoutMs: 2000 }));
+    assert.equal(targetHits, 0, 'A redirect must never receive private RPC data');
+  } finally { await Promise.all([target, redirect].map(server => new Promise<void>(resolve => server.close(() => resolve())))); }
+});
 
 test('navigation origins and review classification', () => {
   assert.equal(new URL(allowedUrl('/DigiGov/login.jsp')).hostname, 'etris.hrdcorp.gov.my');
@@ -281,19 +323,25 @@ test('local worker rejects unauthorized, cross-origin, and oversized requests', 
     }
     assert.ok(token, 'Worker should start');
     const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-    assert.equal((await fetch(`${base}/health`)).status, 401);
-    assert.equal((await fetch(`${base}/health`, { headers: auth })).status, 200);
+    const localRequest = (requestPath: string, options: Parameters<typeof loopbackRequest>[2] = {}) => loopbackRequest(testPort, requestPath, options);
+    assert.equal((await localRequest('/health')).status, 401);
+    assert.equal((await localRequest('/health', { headers: auth })).status, 200);
     const wrongHost = await new Promise<number | undefined>((resolve, reject) => {
-      const request = httpRequest(`${base}/health`, { headers: { ...auth, Host: 'attacker.example' } }, response => { response.resume(); resolve(response.statusCode); });
+      const request = httpRequest({ hostname: '127.0.0.1', port: testPort, path: '/health', headers: { Host: 'attacker.example' } }, response => { response.resume(); resolve(response.statusCode); });
       request.on('error', reject); request.end();
     });
     assert.equal(wrongHost, 403);
-    assert.equal((await fetch(`${base}/rpc`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
-    assert.equal((await fetch(`${base}/rpc`, { method: 'POST', headers: { ...auth, Origin: 'https://attacker.example' }, body: '{}' })).status, 403);
-    assert.equal((await fetch(`${base}/credentials?token=invalid`)).status, 403);
-    assert.equal((await fetch(`${base}/credentials`, { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'token=invalid' })).status, 403);
-    assert.equal((await fetch(`${base}/rpc`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'unknown' }) })).status, 400);
-    assert.equal((await fetch(`${base}/rpc`, { method: 'POST', headers: auth, body: 'x'.repeat(66000) })).status, 400);
+    assert.equal((await localRequest('/rpc', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
+    assert.equal((await localRequest('/rpc', { method: 'POST', headers: { ...auth, Origin: 'https://attacker.example' }, body: '{}' })).status, 403);
+    assert.equal((await localRequest('/credentials?token=invalid')).status, 403);
+    assert.equal((await localRequest('/credentials', { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'token=invalid' })).status, 403);
+    assert.equal((await localRequest('/rpc', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'unknown' }) })).status, 400);
+    const malformed = await localRequest('/rpc', { method: 'POST', headers: auth, body: '{"password":"fixture-sensitive"' });
+    assert.equal(malformed.status, 400);
+    assert.ok(!(await malformed.text()).includes('fixture-sensitive'));
+    const wrongArgs = await localRequest('/rpc', { method: 'POST', headers: auth, body: JSON.stringify({ action: 'status', args: { password: 'fixture-sensitive' } }) });
+    assert.equal(wrongArgs.status, 400);
+    assert.equal((await localRequest('/rpc', { method: 'POST', headers: auth, body: 'x'.repeat(66000) })).status, 400);
     assert.ok(!(await readFile(path.join(folder, 'worker-token'), 'utf8')).includes('fixture-user'));
   } finally {
     child.kill();

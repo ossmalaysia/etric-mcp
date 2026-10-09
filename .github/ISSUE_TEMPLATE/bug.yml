@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a reproducible problem without private account information.
+body:
+  - type: markdown
+    attributes:
+      value: Never attach credentials, cookies, tokens, raw portal pages, screenshots of account data, or real programme identifiers. Use the private security reporting link for vulnerabilities.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction using synthetic or redacted information
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system, Node version, browser, and MCP client

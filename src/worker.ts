@@ -6,6 +6,7 @@ import { dataDir, port, tokenFile, profileDir, vaultFile, browserMode } from './
 import { Vault } from './vault.js';
 import { credentialPage, reviewPage, page } from './ui.js';
 import { programmeReadUrl } from './navigation.js';
+import { hasBearerToken, parseWorkerRequest } from './security.js';
 
 export const localResponseHeaders = {
   'Cache-Control': 'no-store',
@@ -13,6 +14,8 @@ export const localResponseHeaders = {
   // for validation while excluding the page path and token from Referer.
   'Referrer-Policy': 'strict-origin',
   'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 };
 
@@ -30,9 +33,9 @@ export function fingerprint(view: View): string {
 
 export async function startWorker(): Promise<void> {
   const token = randomBytes(32).toString('hex');
-  const session = new BrowserSession(profileDir, undefined, undefined, browserMode === 'background');
-  const vault = new Vault(vaultFile);
   const localOrigin = `http://127.0.0.1:${port}`;
+  const session = new BrowserSession(profileDir, undefined, undefined, browserMode === 'background', localOrigin);
+  const vault = new Vault(vaultFile);
   const credentialTokens = new Map<string, number>();
   const approvals = new Map<string, { resolve: (approved: boolean) => void; details: string; action: string; expires: number }>();
   let busy = false;
@@ -148,11 +151,11 @@ export async function startWorker(): Promise<void> {
     for await (const chunk of req) { text += chunk.toString('utf8'); if (Buffer.byteLength(text) > 65536) throw new Error('Request too large.'); }
     return text;
   }
-  const server = createServer((req, res) => {
+  const server = createServer({ maxHeaderSize: 8192, requestTimeout: 30000, headersTimeout: 10000 }, (req, res) => {
     void (async () => {
       if (req.headers.host !== `127.0.0.1:${port}`) return respond(res, 403, { error: 'Invalid Host.' });
       const url = new URL(req.url ?? '/', localOrigin);
-      const authorized = req.headers.authorization === `Bearer ${token}`;
+      const authorized = hasBearerToken(req.headers.authorization, token);
       if (url.pathname === '/health' && req.method === 'GET') return respond(res, authorized ? 200 : 401, authorized ? { status: 'ok', service: 'etric-mcp', version: 1 } : { error: 'Unauthorized.' });
       if (req.method === 'POST' && ['/credentials', '/decision'].includes(url.pathname)) {
         if (req.headers.origin !== localOrigin) return respond(res, 403, { error: 'Invalid Origin.' });
@@ -197,18 +200,19 @@ export async function startWorker(): Promise<void> {
         if (busy) return respond(res, 409, { error: 'A browser action is already in progress. Complete any local review before calling another tool.' });
         busy = true;
         try {
-          const request = JSON.parse(await body(req));
-          const result = await execute(request.action, request.args ?? {});
+          const request = parseWorkerRequest(await body(req));
+          const result = await execute(request.action, request.args);
           return respond(res, 200, { result });
         } catch (error) {
           // Avoid returning Playwright exceptions which can contain input values.
-          const message = error instanceof Error && !error.name.includes('Timeout') && !/locator\.|page\.|frame\./i.test(error.message) ? error.message : 'Browser action failed. Inspect the page and retry; do not assume it succeeded.';
+          const message = error instanceof Error && !['SyntaxError', 'ZodError'].includes(error.name) && !error.name.includes('Timeout') && !/locator\.|page\.|frame\./i.test(error.message) ? error.message : 'Browser action failed. Inspect the page and retry; do not assume it succeeded.';
           return respond(res, 400, { error: message });
         } finally { busy = false; }
       }
       respond(res, 404, { error: 'Not found.' });
     })().catch(() => respond(res, 500, { error: 'Local request failed. No credential details are logged.' }));
   });
+  server.maxHeadersCount = 32;
   await mkdir(dataDir, { recursive: true });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   await writeFile(tokenFile, token, { mode: 0o600 });

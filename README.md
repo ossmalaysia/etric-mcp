@@ -2,6 +2,8 @@
 
 A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the background during routine use. The user signs in locally; an MCP-compatible assistant can inspect pages, navigate menus, read program tables, prepare program forms, and request save/delete actions.
 
+[![CI](https://github.com/ossmalaysia/etric-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ossmalaysia/etric-mcp/actions/workflows/ci.yml)
+
 **Status:** local browser integration. All five read-only MCP tools and four navigation helpers passed a live account check on 2026-10-10: authorized menu capture, programme listing, and all three detail tabs for each visible programme. `etric_sections` captures the current account's authorized menu routes dynamically; `etric_open_section` opens a captured route, and `etric_program_list` opens View My Programme automatically. Form writes, uploads, search, multi-page pagination, and final submission receipts still need account-specific validation. These tools do not provide a direct program database API.
 
 ## Requirements
@@ -14,7 +16,7 @@ A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the b
 ## Install and open login
 
 ```powershell
-npm ci
+npm ci --ignore-scripts
 npm run build
 npm run login
 ```
@@ -149,3 +151,13 @@ Start from the authenticated eTRiS desktop in background mode. The check can reu
 The 2026-10-10 live check passed with 53 authorized menu entries, four visible programmes, and 12 detail-tab reads, with zero programme writes. Counts depend on the connected account. Eight synthetic regression tests also passed, covering expired-session detection, delayed detail navigation, and application frames whose runtime names change.
 
 This is an independent community project and is not affiliated with HRD Corp.
+
+## OSS maintenance and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). GitHub Actions tests Windows/Linux on Node 22/24, scans complete fetched Git history and every tracked file for secrets, scans source and workflows with CodeQL, and verifies dependency vulnerabilities, signatures, and available attestations. Checks run on every push/PR and weekly, including documentation changes. Live account tests are kept out of CI.
+
+The protected default branch requires passing checks and review. Actions use full commit SHAs, minimal token permissions, and no saved checkout credentials. Dependabot proposes dependency/action updates; GitHub secret scanning and push protection help prevent published secrets. Passing scans does not establish a security certification; the trust boundaries and scan limits are documented in the security policy.
+
+The CI bootstrap passed all four Windows/Linux Node 22/24 combinations, with eleven regression tests on Windows and a DPAPI skip on Linux. Source/workflow CodeQL gates have no unreviewed findings; the expected loopback authentication flow has one exact, hash-bound exception documented in the security policy. SonarCloud's security gate also passes. Merges require an approving code owner: your own PR needs another eligible reviewer. Have a trusted maintainer with Write access propose adding their username to `.github/CODEOWNERS`, then review that PR to establish a second code owner.
+
+Matching version tags can build an allowlisted runtime ZIP and SHA-256 digest after the checks pass. The workflow retains it as an Actions artifact; npm publication and remote deployment are outside this local project. No release tag is created automatically.

@@ -2,12 +2,12 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { port, tokenFile } from './config.js';
+import { loopbackRequest } from './transport.js';
 
-const base = `http://127.0.0.1:${port}`;
 async function workerToken(): Promise<string | undefined> {
   try {
     const token = (await readFile(tokenFile, 'utf8')).trim();
-    const response = await fetch(`${base}/health`, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(1000) });
+    const response = await loopbackRequest(port, '/health', { headers: { Authorization: `Bearer ${token}` }, timeoutMs: 1000 });
     if (response.ok && (await response.json() as { service: string }).service === 'etric-mcp') return token;
   } catch { /* The worker may not have started yet. */ }
   return undefined;
@@ -29,8 +29,9 @@ export async function ensureWorker(): Promise<string> {
 }
 export async function callWorker(action: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const token = await ensureWorker();
-  const response = await fetch(`${base}/rpc`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, args }), signal: AbortSignal.timeout(150000) });
-  const body = await response.json() as { result?: unknown; error?: string };
+  const response = await loopbackRequest(port, '/rpc', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, args }) });
+  let body: { result?: unknown; error?: string };
+  try { body = await response.json() as typeof body; } catch { throw new Error('Invalid local worker response. No response details are returned.'); }
   if (!response.ok) throw new Error(body.error ?? 'Local worker call failed.');
   return body.result;
 }

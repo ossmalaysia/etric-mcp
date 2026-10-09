@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo:
+    name: Repository policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm run check:repo
+      - name: Validate workflow syntax and shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$archive"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/actionlint-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint-bin" actionlint
+          "$RUNNER_TEMP/actionlint-bin/actionlint" .github/workflows/ci.yml
+
+  test:
+    name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+        node: ['22', '24']
+    env:
+      ETRIC_BROWSER_MODE: background
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - name: Install Linux browser dependencies
+        if: runner.os == 'Linux'
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Use installed Edge or Chrome on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $edgeInstalled = Test-Path -LiteralPath 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+          $chromeInstalled = Test-Path -LiteralPath 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+          if ($edgeInstalled -or $chromeInstalled) {
+            Write-Output 'Using the installed browser for Windows integration tests.'
+          } else {
+            npx --no-install playwright install chromium
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+      - name: Synthetic tests on Linux
+        if: runner.os == 'Linux'
+        env:
+          ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
+        run: xvfb-run --auto-servernum npm test
+      - name: Synthetic tests on Windows (including DPAPI)
+        if: runner.os == 'Windows'
+        env:
+          ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
+        run: npm test
+
+  dependencies:
+    name: Dependency integrity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm run audit
+
+  secrets:
+    name: Secrets (all files and history)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-verified Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/gitleaks-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/gitleaks-bin" gitleaks
+      - name: Scan complete Git history and every tracked file
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner="$RUNNER_TEMP/gitleaks-bin/gitleaks"
+          "$scanner" git --redact --no-banner --log-opts='--all' .
+          snapshot="$RUNNER_TEMP/etric-source-snapshot"
+          mkdir "$snapshot"
+          git archive HEAD | tar -x -C "$snapshot"
+          "$scanner" dir --redact --no-banner "$snapshot"
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: ${{ matrix.language == 'javascript-typescript' && 'security-extended' || '' }}
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        with:
+          output: sarif-results
+          category: /language:${{ matrix.language }}
+      - name: Fail on code scanning findings
+        run: node scripts/check-sarif.mjs sarif-results
+
+  required:
+    name: Required checks
+    if: always()
+    needs: [repo, test, dependencies, secrets, codeql]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    env:
+      REPO_RESULT: ${{ needs.repo.result }}
+      TEST_RESULT: ${{ needs.test.result }}
+      DEPENDENCY_RESULT: ${{ needs.dependencies.result }}
+      SECRET_RESULT: ${{ needs.secrets.result }}
+      CODEQL_RESULT: ${{ needs.codeql.result }}
+    steps:
+      - name: Require every test and security job to pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          for result in "$REPO_RESULT" "$TEST_RESULT" "$DEPENDENCY_RESULT" "$SECRET_RESULT" "$CODEQL_RESULT"; do
+            test "$result" = success
+          done
+
+  package:
+    name: Release package
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: required
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a release commit from the reviewed default branch
+        run: git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Package only the runtime and public documentation
+        shell: pwsh
+        run: |
+          node scripts/package-release.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -LiteralPath release/etric-mcp -DestinationPath release/etric-mcp.zip
+          (Get-FileHash release/etric-mcp.zip -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content release/etric-mcp.zip.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: etric-mcp-runtime
+          path: |
+            release/etric-mcp.zip
+            release/etric-mcp.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
