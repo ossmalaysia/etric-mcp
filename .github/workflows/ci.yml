@@ -31,6 +31,17 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: npm run check:repo
+      - name: Validate workflow syntax and shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$archive"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/actionlint-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint-bin" actionlint
+          "$RUNNER_TEMP/actionlint-bin/actionlint" .github/workflows/ci.yml
 
   test:
     name: Test (${{ matrix.os }}, Node ${{ matrix.node }})
@@ -42,7 +53,6 @@ jobs:
         os: [windows-2025, ubuntu-24.04]
         node: ['22', '24']
     env:
-      ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
       ETRIC_BROWSER_MODE: background
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -56,9 +66,13 @@ jobs:
       - run: npx --no-install playwright install --with-deps chromium
       - name: Synthetic tests on Linux
         if: runner.os == 'Linux'
+        env:
+          ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
         run: xvfb-run --auto-servernum npm test
       - name: Synthetic tests on Windows (including DPAPI)
         if: runner.os == 'Windows'
+        env:
+          ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
         run: npm test
 
   dependencies:

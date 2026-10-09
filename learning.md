@@ -51,6 +51,7 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - OSS scans must be automated and enforced, not described as complete merely because a local secret scan passed. Scan complete fetched history and every tracked file separately, audit vulnerabilities plus registry signatures/available attestations, and scan both source and Actions workflows. CI must never use the live account.
 - **Observed:** npm reported an invalid attestation for transitive `eventsource-parser@3.1.1` despite a clean vulnerability audit. A compatible override to `3.1.0` passes registry/attestation verification. This is a verification failure, not proof of compromise; do not suppress the audit to accept it.
 - Keep local request validation at the worker boundary as well as MCP schemas. Malformed JSON/schema errors can quote supplied values; return generic errors instead. Browser navigation should allow only the portal and the exact local form origin, not arbitrary loopback ports.
+- Workflow YAML parsing is not GitHub expression/context validation. The first hosted bootstrap rejected `runner.temp` at job-level `env`; move it to step-level `env`, and validate workflows with checksum-verified Actionlint locally and in CI.
 
 ## Task entry template
 
