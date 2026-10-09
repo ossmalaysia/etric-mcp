@@ -26,7 +26,7 @@ export class BrowserSession {
     this.dismissedDialogs = this.dismissedDialogs.slice(-10);
     void dialog.dismiss().catch(() => {});
   };
-  constructor(private profile: string, private baseUrl = portalUrl, private origin = portalOrigin, private headless = false) {}
+  constructor(private profile: string, private baseUrl = portalUrl, private origin = portalOrigin, private headless = false, private localOrigin?: string) {}
   get mode(): 'background' | 'visible' { return this.headless ? 'background' : 'visible'; }
   async setVisibility(visible: boolean): Promise<object> {
     const headless = !visible;
@@ -105,8 +105,7 @@ export class BrowserSession {
         const request = route.request();
         if (request.isNavigationRequest()) {
           const url = new URL(request.url());
-          const local = url.hostname === '127.0.0.1' && url.protocol === 'http:';
-          if (url.origin !== this.origin && !local) return route.abort();
+          if (url.origin !== this.origin && url.origin !== this.localOrigin) return route.abort();
         }
         await route.continue();
       });
@@ -123,6 +122,8 @@ export class BrowserSession {
     return { status: 'browser_open', };
   }
   async openLocal(url: string): Promise<Page> {
+    const target = new URL(url);
+    if (target.username || target.password || (target.origin !== this.origin && target.origin !== this.localOrigin)) throw new Error('Unsupported local form origin.');
     if (this.headless) await this.setVisibility(true);
     await this.ensure();
     const page = await this.context!.newPage();

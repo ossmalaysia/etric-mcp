@@ -14,6 +14,7 @@ Allow an authorized user to operate HRD Corp eTRiS through an MCP-compatible ass
 6. **Popup handling.** Dismiss notices and extra website windows while preserving the main workspace and programme screen.
 7. **No published secrets.** Keep all real credentials, sessions, tokens, and account/programme records outside the public repository and development notes.
 8. **Persistent project knowledge.** Maintain `learning.md` after every task and consistent instructions in `AGENTS.md` and `CLAUDE.md` so subsequent work reuses prior evidence.
+9. **Secure OSS maintenance.** Require automated cross-platform checks, full-public-source and history secret scans, source/workflow analysis, dependency integrity verification, reviewed changes, and private vulnerability reporting. Document security limits rather than claiming absolute safety.
 
 ## Repository and platform
 

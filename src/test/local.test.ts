@@ -14,6 +14,33 @@ import { allowedUrl } from '../config.js';
 import { needsReview, fingerprint, localResponseHeaders } from '../worker.js';
 import { escapeHtml, credentialPage, reviewPage } from '../ui.js';
 import { safeNavigationUrl, selectSection } from '../navigation.js';
+import { parseWorkerRequest, hasBearerToken } from '../security.js';
+
+test('worker validates arguments and does not echo malformed input', () => {
+  assert.deepEqual(parseWorkerRequest('{"action":"status"}'), { action: 'status', args: {} });
+  for (const input of ['{"action":"status","args":{"password":"fixture-sensitive"}}', '{"action":"navigate","args":{"url":1}}', '{"action":"click","args":{"snapshotId":"invalid","ref":"x"}}', '{"action":"unknown"}', '{"action":"toString"}', '{"password":"fixture-sensitive"', 'null']) {
+    assert.throws(() => parseWorkerRequest(input), error => error instanceof Error && !error.message.includes('fixture-sensitive') && error.message.startsWith('Invalid local request.'));
+  }
+  assert.equal(hasBearerToken('Bearer fixture-token', 'fixture-token'), true);
+  for (const header of [undefined, 'fixture-token', 'Bearer wrong', 'Bearer fixture-token-extra']) assert.equal(hasBearerToken(header, 'fixture-token'), false);
+});
+
+test('browser blocks navigation to unrelated loopback services', { timeout: 20000 }, async () => {
+  let unrelatedHits = 0;
+  const portal = createServer((_req, res) => res.end('<title>Fixture portal</title><p>Fixture page</p>'));
+  const unrelated = createServer((_req, res) => { unrelatedHits++; res.end('<p>Unrelated service</p>'); });
+  await Promise.all([portal, unrelated].map(server => new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))));
+  const origin = `http://127.0.0.1:${(portal.address() as { port: number }).port}`;
+  const forbidden = `http://127.0.0.1:${(unrelated.address() as { port: number }).port}`;
+  const folder = await mkdtemp(path.join(os.tmpdir(), 'etric-origin-test-'));
+  const session = new BrowserSession(path.join(folder, 'browser'), origin, origin, true);
+  try {
+    await session.navigate(origin);
+    await assert.rejects(session.openLocal(forbidden), /Unsupported local form origin/);
+    await assert.rejects((await session.ensure()).goto(forbidden), /ERR_FAILED|ERR_ABORTED/);
+    assert.equal(unrelatedHits, 0, 'Navigation must be blocked before reaching an unrelated local service');
+  } finally { await session.close(); await Promise.all([portal, unrelated].map(server => new Promise<void>(resolve => server.close(() => resolve())))); await rm(folder, { recursive: true, force: true }); }
+});
 
 test('navigation origins and review classification', () => {
   assert.equal(new URL(allowedUrl('/DigiGov/login.jsp')).hostname, 'etris.hrdcorp.gov.my');
@@ -293,6 +320,11 @@ test('local worker rejects unauthorized, cross-origin, and oversized requests', 
     assert.equal((await fetch(`${base}/credentials?token=invalid`)).status, 403);
     assert.equal((await fetch(`${base}/credentials`, { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'token=invalid' })).status, 403);
     assert.equal((await fetch(`${base}/rpc`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'unknown' }) })).status, 400);
+    const malformed = await fetch(`${base}/rpc`, { method: 'POST', headers: auth, body: '{"password":"fixture-sensitive"' });
+    assert.equal(malformed.status, 400);
+    assert.ok(!(await malformed.text()).includes('fixture-sensitive'));
+    const wrongArgs = await fetch(`${base}/rpc`, { method: 'POST', headers: auth, body: JSON.stringify({ action: 'status', args: { password: 'fixture-sensitive' } }) });
+    assert.equal(wrongArgs.status, 400);
     assert.equal((await fetch(`${base}/rpc`, { method: 'POST', headers: auth, body: 'x'.repeat(66000) })).status, 400);
     assert.ok(!(await readFile(path.join(folder, 'worker-token'), 'utf8')).includes('fixture-user'));
   } finally {

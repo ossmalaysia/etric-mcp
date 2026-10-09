@@ -16,3 +16,5 @@ downloads/
 playwright-report/
 test-results/
 secret-scan-report*.json
+release/
+sarif-results/

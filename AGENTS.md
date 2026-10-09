@@ -45,6 +45,8 @@ The latest explicit user instructions take precedence over these project default
 - Keep `.gitignore` exclusions intact and inspect the exact staged file list before publication.
 - Run Gitleaks with redacted output on staged changes before a public push. If a scanner reports a potential secret, resolve it before publishing; do not print the value.
 - Existing user authorization to maintain this public repository covers ordinary source/documentation commits and pushes. Do not introduce another approval step for those already authorized changes.
+- Use branches and pull requests under the repository's protected-main policy. Passing `Required checks` and an approving code-owner review are required for merge; do not bypass protection or weaken it to finish a task. Existing authorization to write source does not replace a required independent review.
+- CI must remain account-free: synthetic fixtures only. Keep full-history/file secret scans, CodeQL, dependency audit/signature verification, full-SHA action pins, and the aggregate required gate intact. See `SECURITY.md` and `CONTRIBUTING.md` for maintenance details.
 
 ## Validation and handoff
 
@@ -64,5 +66,6 @@ The latest explicit user instructions take precedence over these project default
 | `src/browser.ts` | Browser session, snapshots, navigation, visibility, and popup handling |
 | `src/navigation.ts` | Route sanitization and captured section selection |
 | `src/vault.ts` | Windows DPAPI credential persistence |
+| `src/security.ts` | Worker request schemas and constant-time bearer-token validation |
 | `src/ui.ts` | Local credential and review forms |
 | `src/test/local.test.ts` | Synthetic integration and regression tests |
