@@ -63,7 +63,21 @@ jobs:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
       - run: npm ci --ignore-scripts
-      - run: npx --no-install playwright install --with-deps chromium
+      - name: Install Linux browser dependencies
+        if: runner.os == 'Linux'
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Use installed Edge or Chrome on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $edgeInstalled = Test-Path -LiteralPath 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+          $chromeInstalled = Test-Path -LiteralPath 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+          if ($edgeInstalled -or $chromeInstalled) {
+            Write-Output 'Using the installed browser for Windows integration tests.'
+          } else {
+            npx --no-install playwright install chromium
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Synthetic tests on Linux
         if: runner.os == 'Linux'
         env:
