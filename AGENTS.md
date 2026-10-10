@@ -4,7 +4,7 @@
 
 Build a local, model-independent MCP server that makes HRD Corp eTRiS easy to navigate and operate through natural-language requests. Support local credential setup, encrypted saved login, background browser operation, authorized menu discovery, and programme management with verified results.
 
-The current priorities and acceptance criteria are in [intents.md](intents.md). The source repository is **https://github.com/ossmalaysia/etric-mcp**, and it is **public**. The earlier private `anchorsprint` destination was superseded by the user's public OSS Malaysia instruction.
+The current priorities and acceptance criteria are in [intents.md](intents.md). The source repository is **https://github.com/ossmalaysia/etris-mcp**, and it is **public**. The earlier private `anchorsprint` destination was superseded by the user's public OSS Malaysia instruction.
 
 ## Start every task
 

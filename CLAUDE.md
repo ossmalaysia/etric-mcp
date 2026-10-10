@@ -12,7 +12,7 @@ Update `learning.md` for every task before handoff, recording what was attempted
 
 ## Project defaults
 
-- Source is maintained in the **public** `ossmalaysia/etric-mcp` repository.
+- Source is maintained in the **public** `ossmalaysia/etris-mcp` repository.
 - Local stdio MCP and the shared loopback browser worker come first.
 - Routine browser work runs in the background; interactive setup and requested verification can be visible.
 - Credentials remain local and encrypted. Do not ask for passwords in chat or copy secrets/account records into the public source, notes, fixtures, logs, or command arguments.

@@ -18,7 +18,7 @@ Allow an authorized user to operate HRD Corp eTRiS through an MCP-compatible ass
 
 ## Repository and platform
 
-- Repository: **https://github.com/ossmalaysia/etric-mcp**.
+- Repository: **https://github.com/ossmalaysia/etris-mcp**.
 - Visibility: **public**. This supersedes the earlier private `anchorsprint` request.
 - Portal: **https://etris.hrdcorp.gov.my/DigiGov/login.jsp**.
 - Initial platform: Windows, Node.js, TypeScript, Playwright, and Windows DPAPI for saved credentials.

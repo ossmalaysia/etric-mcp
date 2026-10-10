@@ -2,7 +2,7 @@
 
 A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the background during routine use. The user signs in locally; an MCP-compatible assistant can inspect pages, navigate menus, read program tables, prepare program forms, and request save/delete actions.
 
-[![CI](https://github.com/ossmalaysia/etric-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ossmalaysia/etric-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/ossmalaysia/etris-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ossmalaysia/etris-mcp/actions/workflows/ci.yml)
 
 **Status:** local browser integration. All five read-only MCP tools and four navigation helpers passed a live account check on 2026-10-10: authorized menu capture, programme listing, and all three detail tabs for each visible programme. `etric_sections` captures the current account's authorized menu routes dynamically; `etric_open_section` opens a captured route, and `etric_program_list` opens View My Programme automatically. Form writes, uploads, search, multi-page pagination, and final submission receipts still need account-specific validation. These tools do not provide a direct program database API.
 

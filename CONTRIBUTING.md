@@ -26,4 +26,4 @@ Do not include real usernames/passwords, worker tokens, profiles, session cookie
 
 Keep dependencies locked, installs free of lifecycle scripts, and workflow actions pinned to full SHAs. Dependabot proposes updates; reviewers must inspect them and let all checks pass. Never disable scans or add a broad allowlist merely to make CI green. The temporary parser override is explained in [SECURITY.md](SECURITY.md).
 
-Security vulnerabilities belong in [private reporting](https://github.com/ossmalaysia/etric-mcp/security/advisories/new). Ordinary bugs can use the public issue template with redacted information. Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Security vulnerabilities belong in [private reporting](https://github.com/ossmalaysia/etris-mcp/security/advisories/new). Ordinary bugs can use the public issue template with redacted information. Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

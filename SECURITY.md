@@ -6,7 +6,7 @@ Security fixes target the latest commit on `main`. This project is an early loca
 
 ## Report privately
 
-Use [GitHub private vulnerability reporting](https://github.com/ossmalaysia/etric-mcp/security/advisories/new). Do not publish credentials, cookies, tokens, account records, raw authenticated pages, or exploit details in public issues. Provide synthetic reproduction steps, affected commit, and impact. Maintainers will investigate and coordinate disclosure; there is no guaranteed response SLA.
+Use [GitHub private vulnerability reporting](https://github.com/ossmalaysia/etris-mcp/security/advisories/new). Do not publish credentials, cookies, tokens, account records, raw authenticated pages, or exploit details in public issues. Provide synthetic reproduction steps, affected commit, and impact. Maintainers will investigate and coordinate disclosure; there is no guaranteed response SLA.
 
 ## Trust model
 
@@ -29,7 +29,7 @@ Keep `%LOCALAPPDATA%/etric-mcp` private to your OS account. It contains the brow
 
 ## Automated coverage
 
-The [CI workflow](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/workflows/ci.yml) runs for pushes, pull requests, manual dispatch, and a weekly schedule without path exclusions:
+The [CI workflow](https://github.com/ossmalaysia/etris-mcp/blob/main/.github/workflows/ci.yml) runs for pushes, pull requests, manual dispatch, and a weekly schedule without path exclusions:
 
 | Check | Coverage |
 | --- | --- |
@@ -49,7 +49,7 @@ Tools have limits: pattern scanners can miss secrets and account data, not every
 
 ## Reviewed code scanning flow
 
-CodeQL's extended `js/file-access-to-http` query flags file data sent in any network request, including the bearer token read from this worker's local token file and sent to its loopback authentication endpoint. The transport validates the port and origin and refuses redirects; synthetic tests verify endpoint/redirect rejection. This expected authentication flow is recorded in [.github/codeql-reviewed.json](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/codeql-reviewed.json), restricted to one rule, file, and sink line, and bound to the SHA-256 of the entire normalized transport source. Changing that source invalidates the exception and fails the gate until reviewed. No query, source directory, or test file is excluded from CodeQL; all other results fail. New or changed exceptions need explicit security rationale and normal required PR review.
+CodeQL's extended `js/file-access-to-http` query flags file data sent in any network request, including the bearer token read from this worker's local token file and sent to its loopback authentication endpoint. The transport validates the port and origin and refuses redirects; synthetic tests verify endpoint/redirect rejection. This expected authentication flow is recorded in [.github/codeql-reviewed.json](https://github.com/ossmalaysia/etris-mcp/blob/main/.github/codeql-reviewed.json), restricted to one rule, file, and sink line, and bound to the SHA-256 of the entire normalized transport source. Changing that source invalidates the exception and fails the gate until reviewed. No query, source directory, or test file is excluded from CodeQL; all other results fail. New or changed exceptions need explicit security rationale and normal required PR review.
 
 ## Release pipeline
 
