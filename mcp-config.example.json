@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "etric": {
+    "etris": {
       "command": "node",
       "args": ["D:/dev/etric-mcp/dist/index.js"],
       "env": { "ETRIC_BROWSER_MODE": "background" }

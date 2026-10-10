@@ -6,7 +6,7 @@ Security fixes target the latest commit on `main`. This project is an early loca
 
 ## Report privately
 
-Use [GitHub private vulnerability reporting](https://github.com/ossmalaysia/etric-mcp/security/advisories/new). Do not publish credentials, cookies, tokens, account records, raw authenticated pages, or exploit details in public issues. Provide synthetic reproduction steps, affected commit, and impact. Maintainers will investigate and coordinate disclosure; there is no guaranteed response SLA.
+Use [GitHub private vulnerability reporting](https://github.com/ossmalaysia/etris-mcp/security/advisories/new). Do not publish credentials, cookies, tokens, account records, raw authenticated pages, or exploit details in public issues. Provide synthetic reproduction steps, affected commit, and impact. Maintainers will investigate and coordinate disclosure; there is no guaranteed response SLA.
 
 ## Trust model
 
@@ -14,22 +14,22 @@ The intended deployment is one trusted OS user, one dedicated browser profile, a
 
 - The worker binds to `127.0.0.1`, uses a random 256-bit bearer token with constant-time comparison, checks Host, validates action/argument schemas, and bounds request bodies/headers and input-reading time. The client validates its fixed loopback endpoint and refuses redirects so RPC data cannot follow a redirect elsewhere.
 - Browser-based RPC is rejected. Local forms require the exact expected Origin and short-lived tokens. Forms are protected against framing, do not cache responses, and escape displayed values. No CORS access is enabled.
-- Saved credentials use Windows DPAPI CurrentUser. Passwords enter a local form and travel to the encryption helper through stdin; they are not MCP arguments or command-line arguments. Login fields and malformed-input details are excluded from tool responses.
+- Saved credentials use Windows DPAPI CurrentUser or macOS Keychain. Passwords enter a local form and travel to the native helper through stdin; they are not MCP arguments or command-line arguments. macOS uses a fixed `/usr/bin/security` executable without a shell, a base64 credential blob in one bounded stdin command, and hashed service names scoped to the data directory. Keychain ACL access is granted to Apple's security utility, never every application (`-A`). Failures return generic errors with no plaintext fallback. Login fields and malformed-input details are excluded from tool responses.
 - Browser document navigation is restricted to the portal origin and this worker's exact local origin, including its port. Unrelated loopback services are blocked. Portal subresources are not a general network sandbox.
 - Routine operation is headless. Reviewed save/delete operations require a local preview and current form state. Refreshed page references prevent accidental use of outdated controls.
 - Website text is untrusted data. Navigation labels and observed routes assist the user, but are not a complete authorization boundary against a malicious assistant or compromised portal. Trusted clients can inspect account data and navigate the portal; do not give unknown clients access to the worker token.
 
-DPAPI does not protect against malware running as the same Windows user, an administrator, a compromised browser/OS, or an untrusted MCP client. JavaScript cannot guarantee complete erasure of plaintext credentials from process memory. This project cannot secure HRD Corp's website, its authentication service, or the LLM provider.
+DPAPI/Keychain do not establish isolation from malware under the same OS user, an administrator, a compromised browser/OS, or an untrusted MCP client. The macOS access grant is to `/usr/bin/security`, so another same-user process able to invoke the utility may also retrieve the item from an unlocked Keychain. JavaScript cannot guarantee complete erasure of plaintext credentials from process memory. This project cannot secure HRD Corp's website, its authentication service, or the LLM provider.
 
 ## Local data
 
-Keep `%LOCALAPPDATA%/etric-mcp` private to your OS account. It contains the browser profile, session data, encrypted credentials, and worker token. Custom `ETRIC_DATA_DIR` paths must also have private OS permissions; do not use a shared folder or put runtime data in the repository. Do not expose or forward the worker port through a tunnel, reverse proxy, or LAN interface.
+Keep `%LOCALAPPDATA%/etric-mcp` on Windows or `~/Library/Application Support/etris-mcp` on macOS private to your OS account. It contains the browser profile, session data, and worker token; Windows also stores its DPAPI credential file there, while macOS stores credentials in the user's default Keychain. New POSIX runtime/profile directories use mode 0700 and the token uses mode 0600. Custom/existing `ETRIC_DATA_DIR` paths must also have private OS permissions; do not use a shared folder or put runtime data in the repository. Moving a Mac data directory changes its Keychain service identity; set up credentials at the new location and remove the old item through its original configuration. Do not expose or forward the worker port through a tunnel, reverse proxy, or LAN interface.
 
 `etric_forget_login` removes the saved credentials and dedicated profile after local review. `npm run stop` stops the worker while retaining them. If credentials leak, change them through the portal, invalidate available sessions, remove exposed local data, and report the incident privately. Removing a file from a new commit does not remove it from Git history.
 
 ## Automated coverage
 
-The [CI workflow](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/workflows/ci.yml) runs for pushes, pull requests, manual dispatch, and a weekly schedule without path exclusions:
+The [CI workflow](https://github.com/ossmalaysia/etris-mcp/blob/main/.github/workflows/ci.yml) runs for pushes, pull requests, manual dispatch, and a weekly schedule without path exclusions:
 
 | Check | Coverage |
 | --- | --- |
@@ -37,7 +37,7 @@ The [CI workflow](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/wor
 | CodeQL | JavaScript/TypeScript source and GitHub Actions workflows; extended security queries for JavaScript. Every unreviewed finding fails the pipeline; the exact local-authentication exception below remains visible in scanner results. |
 | Dependency integrity | Locked install without lifecycle scripts, vulnerability audit including dev dependencies, registry signature and available attestation verification. Any known vulnerability or verification error fails. |
 | Repository policy | Required public project files, documentation links, JSON validity, forbidden runtime-file paths, approved actions pinned to complete commit SHAs. |
-| Synthetic regressions | Windows and Linux on Node 22/24; Windows includes real DPAPI tests with dummy credentials. No live portal credentials are available in CI. |
+| Synthetic regressions | Windows, Linux, and macOS Apple Silicon/Intel on Node 22/24. Windows tests real DPAPI; macOS tests real Keychain in an isolated temporary fixture keychain. Linux skips native credential persistence. No live portal credentials are available in CI. |
 
 GitHub secret scanning, push protection, Dependabot alerts/security updates, and private vulnerability reporting are enabled separately from workflow files. The protected default branch requires passing `Required checks`, an approving review, resolved conversations, and code-owner review. Administrators are subject to the protection; force pushes and deletion are disabled.
 
@@ -49,7 +49,7 @@ Tools have limits: pattern scanners can miss secrets and account data, not every
 
 ## Reviewed code scanning flow
 
-CodeQL's extended `js/file-access-to-http` query flags file data sent in any network request, including the bearer token read from this worker's local token file and sent to its loopback authentication endpoint. The transport validates the port and origin and refuses redirects; synthetic tests verify endpoint/redirect rejection. This expected authentication flow is recorded in [.github/codeql-reviewed.json](https://github.com/ossmalaysia/etric-mcp/blob/main/.github/codeql-reviewed.json), restricted to one rule, file, and sink line, and bound to the SHA-256 of the entire normalized transport source. Changing that source invalidates the exception and fails the gate until reviewed. No query, source directory, or test file is excluded from CodeQL; all other results fail. New or changed exceptions need explicit security rationale and normal required PR review.
+CodeQL's extended `js/file-access-to-http` query flags file data sent in any network request, including the bearer token read from this worker's local token file and sent to its loopback authentication endpoint. The transport validates the port and origin and refuses redirects; synthetic tests verify endpoint/redirect rejection. This expected authentication flow is recorded in [.github/codeql-reviewed.json](https://github.com/ossmalaysia/etris-mcp/blob/main/.github/codeql-reviewed.json), restricted to one rule, file, and sink line, and bound to the SHA-256 of the entire normalized transport source. Changing that source invalidates the exception and fails the gate until reviewed. No query, source directory, or test file is excluded from CodeQL; all other results fail. New or changed exceptions need explicit security rationale and normal required PR review.
 
 ## Release pipeline
 

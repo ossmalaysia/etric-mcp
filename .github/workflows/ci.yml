@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, ubuntu-24.04]
+        os: [windows-2025, ubuntu-24.04, macos-15, macos-15-intel]
         node: ['22', '24']
     env:
       ETRIC_BROWSER_MODE: background
@@ -66,6 +66,17 @@ jobs:
       - name: Install Linux browser dependencies
         if: runner.os == 'Linux'
         run: npx --no-install playwright install --with-deps chromium
+      - name: Prepare macOS browser and isolated test keychain
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install playwright install chromium
+          keychain="$RUNNER_TEMP/etris-fixture.keychain-db"
+          security create-keychain -p fixture-keychain-only "$keychain"
+          security set-keychain-settings -t 3600 "$keychain"
+          security unlock-keychain -p fixture-keychain-only "$keychain"
+          security default-keychain -s "$keychain"
       - name: Use installed Edge or Chrome on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -83,11 +94,17 @@ jobs:
         env:
           ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
         run: xvfb-run --auto-servernum npm test
-      - name: Synthetic tests on Windows (including DPAPI)
-        if: runner.os == 'Windows'
+      - name: Synthetic tests on Windows and macOS (including native vault)
+        if: runner.os != 'Linux'
         env:
           ETRIC_DATA_DIR: ${{ runner.temp }}/etric-ci-runtime
         run: npm test
+      - name: Remove isolated macOS test keychain
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          keychain="$RUNNER_TEMP/etris-fixture.keychain-db"
+          if test -f "$keychain"; then security delete-keychain "$keychain"; fi
 
   dependencies:
     name: Dependency integrity

@@ -213,7 +213,7 @@ export async function startWorker(): Promise<void> {
     })().catch(() => respond(res, 500, { error: 'Local request failed. No credential details are logged.' }));
   });
   server.maxHeadersCount = 32;
-  await mkdir(dataDir, { recursive: true });
+  await mkdir(dataDir, { recursive: true, mode: 0o700 });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
   await writeFile(tokenFile, token, { mode: 0o600 });
   const shutdown = () => { void session.close().finally(() => server.close(() => process.exit(0))); };

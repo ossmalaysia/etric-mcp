@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "etris": {
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/YOUR_USER/dev/etris-mcp/dist/index.js"],
+      "env": { "ETRIC_BROWSER_MODE": "background" }
+    }
+  }
+}

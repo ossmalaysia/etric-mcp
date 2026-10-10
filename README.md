@@ -2,16 +2,20 @@
 
 A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the background during routine use. The user signs in locally; an MCP-compatible assistant can inspect pages, navigate menus, read program tables, prepare program forms, and request save/delete actions.
 
-[![CI](https://github.com/ossmalaysia/etric-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ossmalaysia/etric-mcp/actions/workflows/ci.yml)
+[![CI](https://github.com/ossmalaysia/etris-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ossmalaysia/etris-mcp/actions/workflows/ci.yml)
 
 **Status:** local browser integration. All five read-only MCP tools and four navigation helpers passed a live account check on 2026-10-10: authorized menu capture, programme listing, and all three detail tabs for each visible programme. `etric_sections` captures the current account's authorized menu routes dynamically; `etric_open_section` opens a captured route, and `etric_program_list` opens View My Programme automatically. Form writes, uploads, search, multi-page pagination, and final submission receipts still need account-specific validation. These tools do not provide a direct program database API.
 
 ## Requirements
 
-- Windows for encrypted saved passwords; manual login also works without password storage.
+- Windows or macOS 14+ for saved passwords (Windows DPAPI / macOS Keychain). Linux supports session-only login.
 - Node.js 22 or later.
 - Microsoft Edge or Chrome. If neither is available, install Chromium with `npx playwright install chromium`.
 - An authorized eTRiS account.
+
+See [rodmap.md](rodmap.md) for pending features and validation boundaries. macOS native validation is tracked there separately from Windows live-account checks.
+
+The macOS implementation on PR #2 passed native Keychain and browser fixtures on Apple Silicon and Intel with Node 22/24 (13 tests per Mac job). A real Mac portal/Claude Desktop check remains pending; main receives the implementation only after required review and merge.
 
 ## Install and open login
 
@@ -31,14 +35,34 @@ npm run save-login
 
 A local form opens in the browser. Future `etric_login` calls reuse an available browser session, or fill saved credentials and sign in according to your saved preference. If an automatic attempt leaves you on the login page, the worker stops automatic retries. Update the credentials locally or complete verification yourself.
 
-## Configure a local MCP client
+## Configure Claude Desktop on Windows
 
-Use the absolute path of your checkout:
+Use **Settings → Developer → Local MCP servers → Edit config**, as shown on the Local MCP servers screen. This project connects through a local stdio process.
+
+### 1. Prepare the local server
+
+In PowerShell, run these commands from your checkout:
+
+```powershell
+Set-Location D:\dev\etric-mcp
+node --version
+npm ci --ignore-scripts
+npm run build
+Test-Path .\dist\index.js
+```
+
+Node must be version 22 or later, and `Test-Path` should return `True`. If you already installed and built the server, skip the install/build commands. The GitHub repository is named `etris-mcp`; the existing local checkout in this example is still `D:\dev\etric-mcp`. Substitute your actual checkout path if different.
+
+### 2. Add the server to Claude's config
+
+Click **Edit config**. Open `claude_desktop_config.json` in a text editor if the button opens its folder. The usual Windows location is `%APPDATA%\Claude\claude_desktop_config.json`; use the location opened by your installed app.
+
+If the config is empty, use the complete example below. If it already contains servers, add only the `etris` entry inside the existing `mcpServers` object, keeping the other entries and adding a comma between entries. Leave extension-managed servers such as Filesystem in place.
 
 ```json
 {
   "mcpServers": {
-    "etric": {
+    "etris": {
       "command": "node",
       "args": ["D:/dev/etric-mcp/dist/index.js"],
       "env": { "ETRIC_BROWSER_MODE": "background" }
@@ -47,11 +71,86 @@ Use the absolute path of your checkout:
 }
 ```
 
-This is a stdio server, usable by clients supporting local MCP processes, such as Claude Desktop and Claude Code. Adapt the configuration container to your client's format. For Claude Code:
+The same complete example is in [mcp-config.example.json](mcp-config.example.json). The `args` path must point to the built `dist/index.js`, not the source TypeScript file. Forward slashes work in Windows JSON paths; backslashes must be doubled. Keep usernames and passwords out of this file.
+
+### 3. Restart and check the connection
+
+Save the config, fully quit Claude Desktop, and reopen it. Closing only its window may leave it running; use **Quit** from the system-tray icon if necessary. Return to **Settings → Developer → Local MCP servers** and select `etris`. Check that it is running; use **View logs** if it fails.
+
+In a new conversation, open **+ → Connectors → Manage connectors** and check that the eTRiS tools are available/enabled. Labels may vary with the installed Claude version. Ask:
+
+> Use the etris MCP to check my eTRiS session status. If login is required, use etric_login, then list my programmes. Do not create, update, submit, or cancel anything.
+
+The configured server label is `etris`; the existing tool names still begin with `etric_`, including `etric_session_status`, `etric_login`, and `etric_program_list`. Allow the relevant tool calls when Claude prompts you.
+
+### 4. Set up saved login and background operation
+
+On first login, a local browser form opens. Enter your credentials there and select **Remember my login** and **Sign in automatically**. Credentials are encrypted for your Windows user with DPAPI. Complete any CAPTCHA/OTP locally. Future login calls reuse the session or the saved login.
+
+Routine operation uses background mode. Setup, verification, and write review can show a window. If a visible worker was already running, ask Claude to call `etric_browser_visibility` with `visible: false` after setup; changing the config alone does not change an existing worker's mode. Use `visible: true` when you need to interact with the browser.
+
+### Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `etris` does not appear | Validate the JSON, preserve the existing `mcpServers` object, and fully quit/reopen Claude. |
+| Cannot find `node` / `ENOENT` | Run `(Get-Command node).Source` in PowerShell and use that absolute executable path as `command`, with forward slashes or escaped backslashes. |
+| Cannot find `dist/index.js` | Check the absolute checkout path and run `npm run build` from that checkout. |
+| Browser cannot start | Install Edge/Chrome, or run `npx playwright install chromium` from the checkout. |
+| Login needs attention | Ask for `etric_save_login` to update credentials locally, or show the browser to complete verification. Automatic failed sign-ins are not repeatedly retried. |
+| Server runs but tools are unavailable | Check the conversation's connector settings and tool permissions. Organization policy may restrict local integrations. |
+
+Use **View logs** on the server's Developer screen to investigate connection failures. Keep diagnostic output private if it contains account data. A running server confirms the connection; live create/update/submission/cancellation, uploads, search, and pagination still require account-specific validation.
+
+The configuration, restart, and connector-check steps follow the [official local MCP connection guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers). See also [Claude's local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop).
+
+## Configure Claude Desktop on macOS
+
+Install Node.js 22 or later and Chrome/Edge, or install the project's Chromium fallback. In Terminal:
+
+```bash
+git clone https://github.com/ossmalaysia/etris-mcp.git "$HOME/dev/etris-mcp"
+cd "$HOME/dev/etris-mcp"
+npm ci --ignore-scripts
+npm run build
+npx --no-install playwright install chromium
+command -v node
+printf '%s\n' "$PWD/dist/index.js"
+```
+
+Skip cloning/installing if the checkout is already prepared. Use the last two outputs as the absolute `command` and `args` paths. Desktop apps may not share your shell's PATH, so use the resolved Node executable rather than assuming `node` is discoverable. The runtime uses Chromium/Chrome/Edge, not Safari.
+
+Open **Claude → Settings → Developer → Edit config**. The standard file location is `~/Library/Application Support/Claude/claude_desktop_config.json`. Merge the `etris` entry into existing `mcpServers`, preserving other servers. Example:
+
+```json
+{
+  "mcpServers": {
+    "etris": {
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/YOUR_USER/dev/etris-mcp/dist/index.js"],
+      "env": { "ETRIC_BROWSER_MODE": "background" }
+    }
+  }
+}
+```
+
+Replace both example paths with the actual outputs from Terminal, including `YOUR_USER`. Do not use `~` or shell variables in JSON paths. This example's Node path is illustrative; Intel Macs and other Node installations may use a different path. The copyable file is [mcp-config.macos.example.json](mcp-config.macos.example.json).
+
+Save, fully quit Claude with **Command-Q**, reopen it, and check `etris` in Local MCP servers and the conversation's connector settings. Use the same safe first request and tool names described in the Windows walkthrough. These app steps follow the [official local MCP guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+
+First login opens a local form. Remembered credentials are stored in your macOS user's default Keychain using Apple's `/usr/bin/security`; the server does not store a plaintext credential file. Unlock your login keychain or respond to its access prompt locally when requested. If Keychain access fails, the server reports an error rather than saving plaintext; uncheck **Remember my login** for session-only use. Do not send your Keychain password or eTRiS password to Claude.
+
+Background mode, manual verification, popup handling, and local write review follow the same workflow on both platforms. Logs can be opened with **View logs**; standard macOS Claude logs are under `~/Library/Logs/Claude`. macOS browser requirements follow [Playwright's supported platforms](https://playwright.dev/docs/intro).
+
+## Other local MCP clients
+
+This is a stdio server, usable by clients supporting local MCP processes. Adapt [mcp-config.example.json](mcp-config.example.json) to your client's format. For Claude Code:
 
 ```powershell
-claude mcp add --transport stdio etric -- node D:/dev/etric-mcp/dist/index.js
+claude mcp add --transport stdio etris -- node D:/dev/etric-mcp/dist/index.js
 ```
+
+For Claude Code project instructions, setup commands, and the operating workflow, see [CLAUDE.md](CLAUDE.md). It imports the shared agent guidance; it does not replace Desktop's JSON configuration.
 
 ChatGPT's hosted web interface cannot spawn this stdio process directly. Remote connection support is outside this local version. Use a client with local MCP support for now.
 
@@ -100,15 +199,15 @@ Example prompt:
 
 ## Local data and credentials
 
-Runtime data is stored outside the source checkout in `%LOCALAPPDATA%/etric-mcp` by default:
+Runtime data is stored outside the source checkout. Windows defaults to `%LOCALAPPDATA%/etric-mcp`; macOS defaults to `~/Library/Application Support/etris-mcp`; Linux defaults to `~/etric-mcp`.
 
 - `browser/`: dedicated persistent browser profile and session cookies.
-- `credentials.dpapi`: credentials encrypted using Windows DPAPI CurrentUser.
+- `credentials.dpapi` on Windows: credentials encrypted using DPAPI CurrentUser. macOS saves the credential blob in Keychain instead of creating this file; the Keychain service is `org.ossmalaysia.etris-mcp.<hash>` with one item per configured data directory.
 - `worker-token`: random bearer token for the local browser worker.
 
 The password is never included in MCP tool parameters or results. Login pages are omitted from page inspection. The credential form binds only to `127.0.0.1`, validates Host and Origin, and requires a short-lived random token. No screenshots, browser traces, network bodies, or credential logs are collected.
 
-Browser session files and local tokens are sensitive. Keep the data directory private to your operating-system account. DPAPI protects stored credentials at rest; the trusted local worker must decrypt them temporarily to fill the browser. Other software running as the same Windows user is outside this isolation boundary. Navigation classification is conservative label-based UI assistance, not a complete authorization boundary for arbitrary website scripts.
+Browser session files and local tokens are sensitive. Keep the data directory private to your operating-system account. DPAPI/Keychain protect stored credentials at rest; the trusted local worker must retrieve plaintext temporarily to fill the browser. The macOS helper is trusted `/usr/bin/security`, not an isolation boundary against another process under the same OS user. New runtime/profile directories use owner-only permissions on POSIX systems. Navigation classification is conservative label-based UI assistance, not a complete authorization boundary for arbitrary website scripts.
 
 Source control excludes environment files, credentials, runtime profiles, logs, downloads, and generated files. Never place real credentials in examples, tests, issue reports, or screenshots.
 
@@ -116,7 +215,7 @@ Optional environment variables:
 
 | Variable | Default |
 | --- | --- |
-| `ETRIC_DATA_DIR` | `%LOCALAPPDATA%/etric-mcp` |
+| `ETRIC_DATA_DIR` | Windows: `%LOCALAPPDATA%/etric-mcp`; macOS: `~/Library/Application Support/etris-mcp`; Linux: `~/etric-mcp` |
 | `ETRIC_PORT` | `43127` |
 | `ETRIC_BROWSER_MODE` | `background` (`visible` to show the browser) |
 
@@ -154,7 +253,7 @@ This is an independent community project and is not affiliated with HRD Corp.
 
 ## OSS maintenance and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). GitHub Actions tests Windows/Linux on Node 22/24, scans complete fetched Git history and every tracked file for secrets, scans source and workflows with CodeQL, and verifies dependency vulnerabilities, signatures, and available attestations. Checks run on every push/PR and weekly, including documentation changes. Live account tests are kept out of CI.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). GitHub Actions tests Windows/Linux/macOS (Apple Silicon and Intel) on Node 22/24, scans complete fetched Git history and every tracked file for secrets, scans source and workflows with CodeQL, and verifies dependency vulnerabilities, signatures, and available attestations. Checks run on every push/PR and weekly, including documentation changes. Live account tests are kept out of CI.
 
 The protected default branch requires passing checks and review. Actions use full commit SHAs, minimal token permissions, and no saved checkout credentials. Dependabot proposes dependency/action updates; GitHub secret scanning and push protection help prevent published secrets. Passing scans does not establish a security certification; the trust boundaries and scan limits are documented in the security policy.
 

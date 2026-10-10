@@ -2,12 +2,13 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { MacKeychain } from './keychain.js';
 
 export interface Credentials { username: string; password: string; autoSignIn?: boolean }
 
 // Passwords travel over the child's stdin, never in command arguments or logs.
 async function dpapi(mode: 'protect' | 'unprotect', input: string): Promise<string> {
-  if (process.platform !== 'win32') throw new Error('Saved passwords currently require Windows DPAPI. Manual browser login still works.');
+  if (process.platform !== 'win32') throw new Error('Saved passwords require Windows DPAPI or macOS Keychain. Manual browser login still works.');
   const method = mode === 'protect' ? 'Protect' : 'Unprotect';
   const script = `
 $ErrorActionPreference = 'Stop'
@@ -36,28 +37,44 @@ try {
 }
 
 export class Vault {
-  constructor(private file: string) {}
+  private readonly keychain: MacKeychain;
+  constructor(private file: string) { this.keychain = new MacKeychain(file); }
   async exists(): Promise<boolean> {
+    if (process.platform === 'darwin') return this.keychain.exists();
     try { await readFile(this.file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
   }
   async save(credentials: Credentials): Promise<void> {
     if (!credentials.username.trim() || !credentials.password || credentials.username.length > 100 || credentials.password.length > 50) throw new Error('Enter a username (up to 100 characters) and password (up to 50 characters).');
     const encoded = Buffer.from(JSON.stringify(credentials), 'utf8');
+    if (process.platform === 'darwin') {
+      try { await this.keychain.save(encoded.toString('base64')); } finally { encoded.fill(0); }
+      return;
+    }
     let encrypted: string;
     try { encrypted = await dpapi('protect', encoded.toString('base64')); } finally { encoded.fill(0); }
-    await mkdir(path.dirname(this.file), { recursive: true });
+    await mkdir(path.dirname(this.file), { recursive: true, mode: 0o700 });
     const temporary = `${this.file}.${randomUUID()}.tmp`;
     await writeFile(temporary, encrypted, { mode: 0o600 });
     await rename(temporary, this.file);
   }
   async load(): Promise<Credentials | undefined> {
-    if (!await this.exists()) return undefined;
-    const bytes = Buffer.from(await dpapi('unprotect', await readFile(this.file, 'utf8')), 'base64');
+    let encoded: string | undefined;
+    if (process.platform === 'darwin') encoded = await this.keychain.load();
+    else {
+      if (!await this.exists()) return undefined;
+      encoded = await dpapi('unprotect', await readFile(this.file, 'utf8'));
+    }
+    if (encoded === undefined) return undefined;
+    const bytes = Buffer.from(encoded, 'base64');
     try {
       const result: unknown = JSON.parse(bytes.toString('utf8'));
       if (!result || typeof result !== 'object' || !('username' in result) || !('password' in result) || typeof result.username !== 'string' || typeof result.password !== 'string') throw new Error('Invalid saved credential data.');
       return { username: result.username, password: result.password, ...('autoSignIn' in result && typeof result.autoSignIn === 'boolean' ? { autoSignIn: result.autoSignIn } : {}) };
-    } finally { bytes.fill(0); }
+    } catch { throw new Error('Invalid saved credential data.'); }
+    finally { bytes.fill(0); }
   }
-  async forget(): Promise<void> { await unlink(this.file).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
+  async forget(): Promise<void> {
+    if (process.platform === 'darwin') return this.keychain.forget();
+    await unlink(this.file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  }
 }

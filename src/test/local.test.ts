@@ -10,7 +10,8 @@ import os from 'node:os';
 import { createServer, request as httpRequest } from 'node:http';
 import { BrowserSession, type View } from '../browser.js';
 import { Vault } from '../vault.js';
-import { allowedUrl } from '../config.js';
+import { MacKeychain, type SecurityRunner } from '../keychain.js';
+import { allowedUrl, defaultDataDir } from '../config.js';
 import { needsReview, fingerprint, localResponseHeaders } from '../worker.js';
 import { escapeHtml, credentialPage, reviewPage } from '../ui.js';
 import { safeNavigationUrl, selectSection } from '../navigation.js';
@@ -167,17 +168,63 @@ window.continentStore0={fetch:r=>r.onComplete([root]),getLabel:i=>i.label,getVal
   } finally { await session.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(folder, { recursive: true, force: true }); }
 });
 
-test('Windows vault encrypts and round-trips dummy credentials', { skip: process.platform !== 'win32' }, async () => {
+test('default runtime directories respect platform and keep Windows compatibility', () => {
+  assert.equal(defaultDataDir('darwin', '/Users/fixture', 'C:/ignored'), '/Users/fixture/Library/Application Support/etris-mcp');
+  assert.equal(defaultDataDir('win32', 'C:\\Users\\fixture', 'C:\\LocalData'), 'C:\\LocalData\\etric-mcp');
+});
+
+test('Keychain keeps secrets out of process arguments and fails closed', async () => {
+  const encoded = Buffer.from(JSON.stringify({ username: 'fixture-user', password: 'fixture;"\nprivate', autoSignIn: false })).toString('base64');
+  let stored: string | undefined;
+  const calls: { args: string[]; input?: string }[] = [];
+  const runner: SecurityRunner = async (args, input) => {
+    calls.push({ args, input });
+    if (args[0] === '-i') { stored = input!.trim().split(' ').at(-1); return { code: 0, output: '' }; }
+    if (args[0] === 'delete-generic-password') { stored = undefined; return { code: 0, output: '' }; }
+    return { code: stored ? 0 : 44, output: args.includes('-w') ? stored ?? '' : '' };
+  };
+  const keychain = new MacKeychain('/fixture/vault', runner);
+  assert.equal(await keychain.exists(), false);
+  assert.equal(await keychain.load(), undefined);
+  await keychain.save(encoded);
+  assert.equal(await keychain.exists(), true);
+  assert.equal(await keychain.load(), encoded);
+  assert.deepEqual(calls.find(c => c.input)?.args, ['-i']);
+  assert.ok(calls.every(c => !c.args.join(' ').includes(encoded) && !c.args.join(' ').includes('fixture-user')));
+  assert.ok(calls.find(c => c.input)!.input!.includes('-T /usr/bin/security'));
+  assert.ok(!calls.find(c => c.input)!.input!.includes(' -A '));
+  assert.equal(calls.find(c => c.input)!.input!.split('\n').length, 2, 'Credential punctuation/newlines cannot inject another interactive command');
+  await keychain.save(encoded);
+  const update = calls.filter(c => c.input).at(-1)!;
+  assert.ok(update.input!.includes(' -U '));
+  assert.ok(!update.input!.includes(' -T '), 'Updates preserve ACLs instead of triggering a security access-change prompt');
+  await keychain.forget();
+  assert.equal(await keychain.exists(), false);
+  const denied = new MacKeychain('/fixture/vault', async () => ({ code: 36, output: 'fixture-sensitive-error' }));
+  for (const action of [() => denied.exists(), () => denied.load(), () => denied.save(encoded), () => denied.forget()]) {
+    await assert.rejects(action(), error => error instanceof Error && error.message.includes('Keychain') && !error.message.includes('fixture-sensitive'));
+  }
+  await assert.rejects(keychain.save('invalid\ncommand'), /Invalid credential data/);
+  const corrupt = new MacKeychain('/fixture/vault', async () => ({ code: 0, output: 'invalid private text!' }));
+  await assert.rejects(corrupt.load(), /Invalid saved credential data/);
+});
+
+test('native vault round-trips, updates and removes dummy credentials', { skip: !['win32', 'darwin'].includes(process.platform) }, async () => {
   const folder = await mkdtemp(path.join(os.tmpdir(), 'etric-vault-test-'));
+  const file = path.join(folder, 'credentials.dpapi');
+  const vault = new Vault(file);
   try {
-    const file = path.join(folder, 'credentials.dpapi');
-    const vault = new Vault(file);
     assert.equal(await vault.exists(), false);
     const dummy = { username: 'fixture-user', password: 'dummy-password-for-test-only' };
     await vault.save(dummy);
-    const stored = await readFile(file, 'utf8');
-    assert.ok(!stored.includes(dummy.password));
-    assert.ok(!stored.includes(dummy.username));
+    if (process.platform === 'win32') {
+      const stored = await readFile(file, 'utf8');
+      assert.ok(!stored.includes(dummy.password));
+      assert.ok(!stored.includes(dummy.username));
+    } else {
+      await assert.rejects(readFile(file), { code: 'ENOENT' }, 'macOS credentials belong in Keychain, not a disk file');
+      assert.equal(await new Vault(path.join(folder, 'other-vault')).load(), undefined, 'Custom vaults have isolated Keychain items');
+    }
     assert.deepEqual(await vault.load(), dummy);
     await vault.save({ ...dummy, password: 'updated-dummy-password' });
     assert.equal((await vault.load())!.password, 'updated-dummy-password');
@@ -185,7 +232,7 @@ test('Windows vault encrypts and round-trips dummy credentials', { skip: process
     assert.equal((await vault.load())!.autoSignIn, false);
     await vault.forget();
     assert.equal(await vault.exists(), false);
-  } finally { await rm(folder, { recursive: true, force: true }); }
+  } finally { await vault.forget(); await rm(folder, { recursive: true, force: true }); }
 });
 
 const fixture = `<!doctype html><html><title>Program fixture</title><body>
