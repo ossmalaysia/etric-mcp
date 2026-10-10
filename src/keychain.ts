@@ -45,7 +45,10 @@ export class MacKeychain {
     // security -i reads commands from stdin. Base64 excludes quoting/newline
     // characters, keeping this one bounded command safe for its line parser.
     if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded) || encoded.length > 2048) throw new Error('Invalid credential data.');
-    const command = [...this.args('add-generic-password'), '-U', '-T', '/usr/bin/security', '-w', encoded].join(' ') + '\n';
+    // Reapplying -T on an existing item changes its ACL and forces a macOS
+    // authorization prompt. Preserve the original ACL during ordinary updates.
+    const options = await this.exists() ? ['-U'] : ['-T', '/usr/bin/security'];
+    const command = [...this.args('add-generic-password'), ...options, '-w', encoded].join(' ') + '\n';
     const { code } = await this.request(['-i'], command);
     if (code !== 0) throw accessError();
   }

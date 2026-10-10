@@ -194,6 +194,10 @@ test('Keychain keeps secrets out of process arguments and fails closed', async (
   assert.ok(calls.find(c => c.input)!.input!.includes('-T /usr/bin/security'));
   assert.ok(!calls.find(c => c.input)!.input!.includes(' -A '));
   assert.equal(calls.find(c => c.input)!.input!.split('\n').length, 2, 'Credential punctuation/newlines cannot inject another interactive command');
+  await keychain.save(encoded);
+  const update = calls.filter(c => c.input).at(-1)!;
+  assert.ok(update.input!.includes(' -U '));
+  assert.ok(!update.input!.includes(' -T '), 'Updates preserve ACLs instead of triggering a security access-change prompt');
   await keychain.forget();
   assert.equal(await keychain.exists(), false);
   const denied = new MacKeychain('/fixture/vault', async () => ({ code: 36, output: 'fixture-sensitive-error' }));

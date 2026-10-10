@@ -219,3 +219,13 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Validation:** Document links and JSON/policy checks passed; the package allowlist includes the roadmap. Publication diff/secret checks passed. No private account data, secrets, record identifiers, or promised delivery dates were added.
 - **Learning:** A useful roadmap states present behavior and observable completion criteria, not just tool names. Preserve the explicitly requested filename and keep it aligned with evidence as implementation advances.
 - **Next:** Update macOS status after hosted native checks. Implement and validate pending features only within the authorized account/action scope.
+
+### 2026-10-10 — Fix native Keychain updates found by macOS CI
+
+- **Objective:** Resolve the native macOS regression rather than skipping credential coverage.
+- **Observed:** Both macOS architectures created/read a dummy Keychain item successfully, but updating it timed out. Windows/Linux and all source/security jobs passed on that implementation head. The failure pointed specifically to the native update call, not browser startup.
+- **Process:** Checked Apple's SecurityTool source. Applying a trusted-app ACL during an existing-item update calls an access-change API that prompts for authorization. Changed the helper to set the trusted application on creation only and preserve existing ACLs for updates. Added a regression assertion for the emitted update command.
+- **Outcome:** The update path no longer requests an unnecessary ACL change; it retains the existing trusted-helper restriction. No broad access grant or plaintext fallback was introduced.
+- **Validation:** Local regression and publication checks are repeated for the changed code; native macOS CI must verify the update behavior on both architectures before marking the feature complete.
+- **Learning:** Passing an identical `-T` option during a security-tool update still performs an ACL mutation. Preserve access controls unless an explicit access-policy change is intended. Native platform tests exposed behavior the subprocess fixture could not prove.
+- **Next:** Check the replacement hosted run, then update roadmap readiness from its actual result.
