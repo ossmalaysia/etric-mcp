@@ -159,3 +159,23 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Validation:** GitHub returned the corrected name and public visibility. Main retained both required checks, one code-owner approval, and administrator enforcement. Repository policy checks, diff checks, and the redacted staged secret scan passed before publication.
 - **Learning:** Correct a repository name by renaming the existing repository so its history and protections persist. Repository naming and an already-configured local data directory are separate concerns.
 - **Next:** Merge the link-correction PR after required checks and independent code-owner approval; do not bypass main protection.
+
+### 2026-10-10 — Clarify overall readiness after the repository rename
+
+- **Objective:** Confirm whether every requested capability is complete.
+- **Observed:** The current session is authenticated, ready, and in background mode with saved credentials available. Main CI and every reported PR check passed; PR #2 remains open with independent review required.
+- **Process:** Queried current worker status and GitHub check/review state, then compared verified capabilities with the remaining acceptance criteria. No login retry, restart, or programme write was needed.
+- **Outcome:** Local login, background navigation, and the previously verified programme reads work. Full live CRUD, uploads, search, pagination, and hosted ChatGPT connectivity are not verified or implemented as complete workflows.
+- **Validation:** Worker status returned successfully; GitHub reported successful CI/security checks and a review-required merge state. The documentation diff and repository policy checks passed.
+- **Learning:** Passing CI verifies the covered checks; it does not complete untested portal operations or replace independent review.
+- **Next:** Validate the remaining account-specific workflows only within authorized scope. This status note is included in the subsequent Claude Desktop documentation publication.
+
+### 2026-10-10 — Document Claude Desktop configuration
+
+- **Objective:** Add a Windows Claude Desktop setup guide matching the user's Local MCP servers screenshot.
+- **Observed:** The README had generic JSON but no Desktop walkthrough. The screenshot showed existing servers and an Edit config button. The local checkout still uses its original directory name, while the public repository name is corrected.
+- **Process:** Checked official MCP/Claude guidance, expanded the README with build prerequisites, configuration merging, restart and connector checks, login/background behavior, and troubleshooting. Aligned the example's display label to `etris`, while retaining existing tool names and valid local paths. Did not modify the user's Desktop config or publish the screenshot.
+- **Outcome:** A copyable Windows configuration and guided read-only first request are documented. Existing servers and local credential entry are explicitly preserved. The open documentation PR includes both corrected repository links and the Desktop guide.
+- **Validation:** README JSON parses and matches `mcp-config.example.json`. An actual stdio client using the documented config connected and discovered all 20 tools, including every named tool in the walkthrough. Repository policy/link checks, diff checks, and the redacted staged Gitleaks scan passed. No unrelated browser restart or live programme write was needed.
+- **Learning:** A Claude Desktop guide must explain merging entries, full application restart, absolute Node/build paths, connector permissions, and the difference between server display labels and tool names. Changing startup mode does not alter an already-running shared worker.
+- **Next:** The source changes require normal protected-branch CI and independent code-owner review. End-to-end setup in the user's Claude Desktop UI was not exercised by the stdio configuration check.

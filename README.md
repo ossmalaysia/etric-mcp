@@ -31,14 +31,34 @@ npm run save-login
 
 A local form opens in the browser. Future `etric_login` calls reuse an available browser session, or fill saved credentials and sign in according to your saved preference. If an automatic attempt leaves you on the login page, the worker stops automatic retries. Update the credentials locally or complete verification yourself.
 
-## Configure a local MCP client
+## Configure Claude Desktop on Windows
 
-Use the absolute path of your checkout:
+Use **Settings → Developer → Local MCP servers → Edit config**, as shown on the Local MCP servers screen. This project connects through a local stdio process.
+
+### 1. Prepare the local server
+
+In PowerShell, run these commands from your checkout:
+
+```powershell
+Set-Location D:\dev\etric-mcp
+node --version
+npm ci --ignore-scripts
+npm run build
+Test-Path .\dist\index.js
+```
+
+Node must be version 22 or later, and `Test-Path` should return `True`. If you already installed and built the server, skip the install/build commands. The GitHub repository is named `etris-mcp`; the existing local checkout in this example is still `D:\dev\etric-mcp`. Substitute your actual checkout path if different.
+
+### 2. Add the server to Claude's config
+
+Click **Edit config**. Open `claude_desktop_config.json` in a text editor if the button opens its folder. The usual Windows location is `%APPDATA%\Claude\claude_desktop_config.json`; use the location opened by your installed app.
+
+If the config is empty, use the complete example below. If it already contains servers, add only the `etris` entry inside the existing `mcpServers` object, keeping the other entries and adding a comma between entries. Leave extension-managed servers such as Filesystem in place.
 
 ```json
 {
   "mcpServers": {
-    "etric": {
+    "etris": {
       "command": "node",
       "args": ["D:/dev/etric-mcp/dist/index.js"],
       "env": { "ETRIC_BROWSER_MODE": "background" }
@@ -47,10 +67,45 @@ Use the absolute path of your checkout:
 }
 ```
 
-This is a stdio server, usable by clients supporting local MCP processes, such as Claude Desktop and Claude Code. Adapt the configuration container to your client's format. For Claude Code:
+The same complete example is in [mcp-config.example.json](mcp-config.example.json). The `args` path must point to the built `dist/index.js`, not the source TypeScript file. Forward slashes work in Windows JSON paths; backslashes must be doubled. Keep usernames and passwords out of this file.
+
+### 3. Restart and check the connection
+
+Save the config, fully quit Claude Desktop, and reopen it. Closing only its window may leave it running; use **Quit** from the system-tray icon if necessary. Return to **Settings → Developer → Local MCP servers** and select `etris`. Check that it is running; use **View logs** if it fails.
+
+In a new conversation, open **+ → Connectors → Manage connectors** and check that the eTRiS tools are available/enabled. Labels may vary with the installed Claude version. Ask:
+
+> Use the etris MCP to check my eTRiS session status. If login is required, use etric_login, then list my programmes. Do not create, update, submit, or cancel anything.
+
+The configured server label is `etris`; the existing tool names still begin with `etric_`, including `etric_session_status`, `etric_login`, and `etric_program_list`. Allow the relevant tool calls when Claude prompts you.
+
+### 4. Set up saved login and background operation
+
+On first login, a local browser form opens. Enter your credentials there and select **Remember my login** and **Sign in automatically**. Credentials are encrypted for your Windows user with DPAPI. Complete any CAPTCHA/OTP locally. Future login calls reuse the session or the saved login.
+
+Routine operation uses background mode. Setup, verification, and write review can show a window. If a visible worker was already running, ask Claude to call `etric_browser_visibility` with `visible: false` after setup; changing the config alone does not change an existing worker's mode. Use `visible: true` when you need to interact with the browser.
+
+### Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `etris` does not appear | Validate the JSON, preserve the existing `mcpServers` object, and fully quit/reopen Claude. |
+| Cannot find `node` / `ENOENT` | Run `(Get-Command node).Source` in PowerShell and use that absolute executable path as `command`, with forward slashes or escaped backslashes. |
+| Cannot find `dist/index.js` | Check the absolute checkout path and run `npm run build` from that checkout. |
+| Browser cannot start | Install Edge/Chrome, or run `npx playwright install chromium` from the checkout. |
+| Login needs attention | Ask for `etric_save_login` to update credentials locally, or show the browser to complete verification. Automatic failed sign-ins are not repeatedly retried. |
+| Server runs but tools are unavailable | Check the conversation's connector settings and tool permissions. Organization policy may restrict local integrations. |
+
+Use **View logs** on the server's Developer screen to investigate connection failures. Keep diagnostic output private if it contains account data. A running server confirms the connection; live create/update/submission/cancellation, uploads, search, and pagination still require account-specific validation.
+
+The configuration, restart, and connector-check steps follow the [official local MCP connection guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers). See also [Claude's local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop).
+
+## Other local MCP clients
+
+This is a stdio server, usable by clients supporting local MCP processes. Adapt [mcp-config.example.json](mcp-config.example.json) to your client's format. For Claude Code:
 
 ```powershell
-claude mcp add --transport stdio etric -- node D:/dev/etric-mcp/dist/index.js
+claude mcp add --transport stdio etris -- node D:/dev/etric-mcp/dist/index.js
 ```
 
 ChatGPT's hosted web interface cannot spawn this stdio process directly. Remote connection support is outside this local version. Use a client with local MCP support for now.
