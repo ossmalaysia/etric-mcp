@@ -86,7 +86,7 @@ export class BrowserSession {
   invalidate(): void { this.generation = undefined; this.refs.clear(); }
   async ensure(): Promise<Page> {
     if (!this.context) {
-      await mkdir(this.profile, { recursive: true });
+      await mkdir(this.profile, { recursive: true, mode: 0o700 });
       const options = { headless: this.headless, viewport: null, acceptDownloads: false };
       // Use an installed browser first, then the Playwright-managed Chromium fallback.
       for (const channel of ['msedge', 'chrome', undefined]) {

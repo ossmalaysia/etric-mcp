@@ -32,7 +32,7 @@ async function main(): Promise<void> {
     });
   }
   register('etric_login', 'login', 'Reuse an available eTRiS session, or open a local credential setup form on first use. Fill saved credentials and sign in according to the saved preference. The user completes verification. Credentials never pass through MCP.');
-  register('etric_save_login', 'save_login', 'Open a local form where the user can enter and optionally save their password using Windows DPAPI. Do not ask for credentials in chat.');
+  register('etric_save_login', 'save_login', 'Open a local form where the user can enter and optionally save their password using Windows DPAPI or macOS Keychain. Do not ask for credentials in chat.');
   register('etric_forget_login', 'forget_login', 'Open local review to delete the saved password and clear the browser profile.', {}, false, true);
   register('etric_session_status', 'status', 'Inspect current browser/login status and whether an encrypted password is saved.', {}, true);
   register('etric_page', 'page', 'Read visible text, tables, and referenced controls, including frames. Login fields are hidden. References expire after actions.', {}, true);

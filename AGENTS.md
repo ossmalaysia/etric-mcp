@@ -8,7 +8,7 @@ The current priorities and acceptance criteria are in [intents.md](intents.md). 
 
 ## Start every task
 
-1. Read this file and [intents.md](intents.md).
+1. Read this file, [intents.md](intents.md), and [rodmap.md](rodmap.md).
 2. Read the durable lessons and the latest relevant entries in [learning.md](learning.md). Apply existing findings before rediscovering them.
 3. Read [README.md](README.md), inspect the working tree, and inspect the code relevant to the task.
 4. Distinguish verified behavior from pending validation. Check existing session state before starting another browser or login attempt.
@@ -23,6 +23,7 @@ The latest explicit user instructions take precedence over these project default
 - Record useful decisions and failed approaches so the next task does not repeat them. Summarize the process rather than copying a transcript.
 - If there is no new lesson, record the checks performed and the remaining state without inventing findings.
 - Keep `intents.md` current when the user changes the objective, priorities, scope, or acceptance criteria.
+- Keep `rodmap.md` current with pending features, work in progress, and verification boundaries.
 - Keep `AGENTS.md` and `CLAUDE.md` aligned; use this file as the common instruction source.
 
 ## Implementation boundaries
@@ -39,7 +40,7 @@ The latest explicit user instructions take precedence over these project default
 ## Public repository and secrets
 
 - Never commit or push real usernames/passwords, browser profiles, cookies, local bearer tokens, credential files, account records, private programme identifiers, raw authenticated pages, or diagnostic captures containing those values.
-- Runtime data belongs outside the checkout in the configured local data directory. Saved credentials use Windows DPAPI CurrentUser.
+- Runtime data belongs outside the checkout in the configured local data directory. Saved credentials use Windows DPAPI CurrentUser or macOS Keychain. Never fall back to plaintext storage when a native vault fails.
 - Password entry is local only. Passwords must not become MCP arguments, tool results, command-line arguments, learning entries, or logs.
 - Use synthetic values in fixtures. Capture generic behavior and sanitized route structure in documentation instead of live account data.
 - Keep `.gitignore` exclusions intact and inspect the exact staged file list before publication.
@@ -65,7 +66,8 @@ The latest explicit user instructions take precedence over these project default
 | `src/worker.ts` | Loopback endpoints, credential setup, request checks, and write reviews |
 | `src/browser.ts` | Browser session, snapshots, navigation, visibility, and popup handling |
 | `src/navigation.ts` | Route sanitization and captured section selection |
-| `src/vault.ts` | Windows DPAPI credential persistence |
+| `src/vault.ts` | Platform credential persistence and validation |
+| `src/keychain.ts` | macOS Keychain access with credentials passed through stdin |
 | `src/security.ts` | Worker request schemas and constant-time bearer-token validation |
 | `src/ui.ts` | Local credential and review forms |
 | `src/test/local.test.ts` | Synthetic integration and regression tests |

@@ -6,7 +6,7 @@ Build a local, model-independent MCP server that makes HRD Corp eTRiS easy to na
 
 ## Required context and workflow
 
-Read and follow [AGENTS.md](AGENTS.md) as the common project instruction source. Before every task, also read [intents.md](intents.md), the durable lessons and latest relevant entries in [learning.md](learning.md), and the relevant implementation and README sections.
+Read and follow [AGENTS.md](AGENTS.md) as the common project instruction source. Before every task, also read [intents.md](intents.md), [rodmap.md](rodmap.md), the durable lessons and latest relevant entries in [learning.md](learning.md), and the relevant implementation and README sections.
 
 @AGENTS.md
 
@@ -29,11 +29,25 @@ claude
 
 Register the server once for this checkout; if `etris` already exists, inspect its configuration before changing it. Local scope keeps this machine-specific registration out of Git. In Claude Code, use `/mcp` to check the connection and available tools. If `node` cannot be resolved, use the absolute executable path returned by `(Get-Command node).Source`.
 
+On macOS, use Terminal instead:
+
+```bash
+cd "$HOME/dev/etris-mcp"
+npm ci --ignore-scripts
+npm run build
+npx --no-install playwright install chromium
+claude mcp add --scope local --env ETRIC_BROWSER_MODE=background --transport stdio etris -- "$(command -v node)" "$PWD/dist/index.js"
+claude mcp get etris
+claude
+```
+
+Saved login uses macOS Keychain; complete any Keychain access/unlock prompt locally. Runtime files default to `~/Library/Application Support/etris-mcp`. Windows keeps DPAPI and its existing data directory.
+
 The server label is `etris`, while the current tool names begin with `etric_`. Do not rename tools or runtime paths merely to match the repository spelling. Instructions and MCP registration are separate: this Markdown file does not start the server by itself.
 
 ## Use with Claude Desktop
 
-Follow the Windows setup section in [README.md](README.md) and merge [mcp-config.example.json](mcp-config.example.json) into the existing Desktop config. Preserve other servers. Fully quit/reopen Desktop after saving, then enable/check the tools in the conversation's connector settings.
+Follow the Windows or macOS setup section in [README.md](README.md). Merge [mcp-config.example.json](mcp-config.example.json) on Windows or [mcp-config.macos.example.json](mcp-config.macos.example.json) on macOS into the existing Desktop config, substituting actual paths. Preserve other servers. Fully quit/reopen Desktop after saving, then enable/check the tools in the conversation's connector settings.
 
 This file is a Claude Code project instruction file, not a Desktop MCP config. For Desktop conversations, explicitly attach this public file or paste the relevant operating instructions when needed. Do not assume every Claude client reads repository instructions automatically.
 
@@ -66,7 +80,7 @@ Keep stdout for the MCP protocol. Building does not reload an existing worker; r
 
 ## Verification and publication limits
 
-Saved login, background navigation, menu capture, and programme list/detail reads are live-verified. Real create/update/submission/cancellation, uploads, search, and pagination still need account-specific validation. Consult `intents.md` for current evidence and remaining criteria; do not claim full CRUD from synthetic fixtures.
+Windows saved login, background navigation, menu capture, and programme list/detail reads are live-verified. macOS Keychain/browser checks use synthetic CI fixtures, not a real portal account. Real create/update/submission/cancellation, uploads, search, and pagination still need account-specific validation. Consult [rodmap.md](rodmap.md) and `intents.md` for current evidence and remaining criteria; do not claim full CRUD from synthetic fixtures.
 
 Run relevant checks for code changes. Documentation-only work needs repository/link checks, diff checks, and a redacted staged secret scan before publication. Use branches/PRs; preserve required checks and independent code-owner approval. Report a blocked merge honestly rather than bypassing protection. Scanners finding nothing do not guarantee zero vulnerabilities or sensitive-data leakage.
 

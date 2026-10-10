@@ -199,3 +199,23 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Validation:** The shared import resolves, every documented npm script exists, every named tool matches the implementation, and the instruction file stays below 200 lines. CLI help supports the documented local scope, environment, and stdio options. Repository/link checks, diff checks, and the redacted staged secret scan passed. No new Claude model session, browser restart, or live programme write was performed.
 - **Learning:** Keep Claude-specific startup guidance in `CLAUDE.md`, import common agent rules, and distinguish instruction loading from MCP registration. Avoid duplicate files that differ only in capitalization.
 - **Next:** Updated PR checks and independent code-owner review are required before merge. Existing portal write-validation limitations remain.
+
+### 2026-10-10 — Add macOS native support
+
+- **Objective:** Support Mac users with saved login, local MCP operation, and Claude setup.
+- **Observed:** Playwright browser channels and stdio transport were cross-platform, but persistence, form copy, runtime paths, and setup instructions assumed Windows. The active Windows worker need not restart to test the new Mac backend.
+- **Process:** Added a macOS Keychain backend through the fixed Apple security utility, with credential data sent only through stdin and separate hashed items per data directory. Added generic native errors, bounded subprocess output/time, no plaintext fallback, private POSIX directories, platform form copy, macOS Desktop/Code examples, and package allowlist entries. Expanded hosted CI to Apple Silicon and Intel macOS with native vault tests in isolated synthetic keychains. Retained the Windows DPAPI path and credential format.
+- **Outcome:** macOS implementation and setup documentation are prepared on PR #2. Windows compatibility is retained; Linux remains session-only. Native macOS CI and real Mac portal verification have separate readiness criteria.
+- **Validation:** Local Windows `npm test` passed all 13 regressions, including Keychain argument/stdin isolation, injection rejection, failure handling, and real DPAPI round trips. Repository/link/JSON checks, workflow lint, diff checks, and allowlisted packaging passed. Redacted staged secret scanning passed before publication. Hosted macOS execution is pending at this entry; a Windows test cannot certify a native Keychain operation.
+- **Learning:** Use platform-native storage rather than plaintext cross-platform files. security interactive mode accepts stdin commands; base64 avoids parser metacharacters and keeps secrets out of argv. Trusting Apple's security utility still allows access within the same OS-user boundary; document that limitation. CI may use only isolated dummy keychain items and must clean them up.
+- **Next:** Check all eight OS/architecture/Node CI combinations and source/security jobs; address failures before calling macOS native checks verified. Demonstrate the portal workflow on an authorized Mac separately. Required code-owner review still applies before merge.
+
+### 2026-10-10 — Add the requested pending-feature roadmap
+
+- **Objective:** Create `rodmap.md` to inform users which features remain unimplemented or unverified.
+- **Observed:** Remaining acceptance criteria were in `intents.md`, but there was no dedicated feature-status/prioritization document. The user requested the filename `rodmap.md`.
+- **Process:** Added verified capabilities, macOS/publication work in progress, a prioritized pending-feature table with completion evidence, and explicitly future scope. Linked it from the README, agent/Claude guidance, and objectives; included it in the public package allowlist and repository policy.
+- **Outcome:** `rodmap.md` distinguishes existing generic form primitives from complete live CRUD, current-page reads from pagination, and automated tests from real Mac/account validation. Future hosted connectivity is not presented as implemented.
+- **Validation:** Document links and JSON/policy checks passed; the package allowlist includes the roadmap. Publication diff/secret checks passed. No private account data, secrets, record identifiers, or promised delivery dates were added.
+- **Learning:** A useful roadmap states present behavior and observable completion criteria, not just tool names. Preserve the explicitly requested filename and keep it aligned with evidence as implementation advances.
+- **Next:** Update macOS status after hosted native checks. Implement and validate pending features only within the authorized account/action scope.

@@ -8,10 +8,12 @@ A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the b
 
 ## Requirements
 
-- Windows for encrypted saved passwords; manual login also works without password storage.
+- Windows or macOS 14+ for saved passwords (Windows DPAPI / macOS Keychain). Linux supports session-only login.
 - Node.js 22 or later.
 - Microsoft Edge or Chrome. If neither is available, install Chromium with `npx playwright install chromium`.
 - An authorized eTRiS account.
+
+See [rodmap.md](rodmap.md) for pending features and validation boundaries. macOS native validation is tracked there separately from Windows live-account checks.
 
 ## Install and open login
 
@@ -100,6 +102,44 @@ Use **View logs** on the server's Developer screen to investigate connection fai
 
 The configuration, restart, and connector-check steps follow the [official local MCP connection guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers). See also [Claude's local MCP help](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop).
 
+## Configure Claude Desktop on macOS
+
+Install Node.js 22 or later and Chrome/Edge, or install the project's Chromium fallback. In Terminal:
+
+```bash
+git clone https://github.com/ossmalaysia/etris-mcp.git "$HOME/dev/etris-mcp"
+cd "$HOME/dev/etris-mcp"
+npm ci --ignore-scripts
+npm run build
+npx --no-install playwright install chromium
+command -v node
+printf '%s\n' "$PWD/dist/index.js"
+```
+
+Skip cloning/installing if the checkout is already prepared. Use the last two outputs as the absolute `command` and `args` paths. Desktop apps may not share your shell's PATH, so use the resolved Node executable rather than assuming `node` is discoverable. The runtime uses Chromium/Chrome/Edge, not Safari.
+
+Open **Claude → Settings → Developer → Edit config**. The standard file location is `~/Library/Application Support/Claude/claude_desktop_config.json`. Merge the `etris` entry into existing `mcpServers`, preserving other servers. Example:
+
+```json
+{
+  "mcpServers": {
+    "etris": {
+      "command": "/opt/homebrew/bin/node",
+      "args": ["/Users/YOUR_USER/dev/etris-mcp/dist/index.js"],
+      "env": { "ETRIC_BROWSER_MODE": "background" }
+    }
+  }
+}
+```
+
+Replace both example paths with the actual outputs from Terminal, including `YOUR_USER`. Do not use `~` or shell variables in JSON paths. This example's Node path is illustrative; Intel Macs and other Node installations may use a different path. The copyable file is [mcp-config.macos.example.json](mcp-config.macos.example.json).
+
+Save, fully quit Claude with **Command-Q**, reopen it, and check `etris` in Local MCP servers and the conversation's connector settings. Use the same safe first request and tool names described in the Windows walkthrough. These app steps follow the [official local MCP guide](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+
+First login opens a local form. Remembered credentials are stored in your macOS user's default Keychain using Apple's `/usr/bin/security`; the server does not store a plaintext credential file. Unlock your login keychain or respond to its access prompt locally when requested. If Keychain access fails, the server reports an error rather than saving plaintext; uncheck **Remember my login** for session-only use. Do not send your Keychain password or eTRiS password to Claude.
+
+Background mode, manual verification, popup handling, and local write review follow the same workflow on both platforms. Logs can be opened with **View logs**; standard macOS Claude logs are under `~/Library/Logs/Claude`. macOS browser requirements follow [Playwright's supported platforms](https://playwright.dev/docs/intro).
+
 ## Other local MCP clients
 
 This is a stdio server, usable by clients supporting local MCP processes. Adapt [mcp-config.example.json](mcp-config.example.json) to your client's format. For Claude Code:
@@ -157,15 +197,15 @@ Example prompt:
 
 ## Local data and credentials
 
-Runtime data is stored outside the source checkout in `%LOCALAPPDATA%/etric-mcp` by default:
+Runtime data is stored outside the source checkout. Windows defaults to `%LOCALAPPDATA%/etric-mcp`; macOS defaults to `~/Library/Application Support/etris-mcp`; Linux defaults to `~/etric-mcp`.
 
 - `browser/`: dedicated persistent browser profile and session cookies.
-- `credentials.dpapi`: credentials encrypted using Windows DPAPI CurrentUser.
+- `credentials.dpapi` on Windows: credentials encrypted using DPAPI CurrentUser. macOS saves the credential blob in Keychain instead of creating this file; the Keychain service is `org.ossmalaysia.etris-mcp.<hash>` with one item per configured data directory.
 - `worker-token`: random bearer token for the local browser worker.
 
 The password is never included in MCP tool parameters or results. Login pages are omitted from page inspection. The credential form binds only to `127.0.0.1`, validates Host and Origin, and requires a short-lived random token. No screenshots, browser traces, network bodies, or credential logs are collected.
 
-Browser session files and local tokens are sensitive. Keep the data directory private to your operating-system account. DPAPI protects stored credentials at rest; the trusted local worker must decrypt them temporarily to fill the browser. Other software running as the same Windows user is outside this isolation boundary. Navigation classification is conservative label-based UI assistance, not a complete authorization boundary for arbitrary website scripts.
+Browser session files and local tokens are sensitive. Keep the data directory private to your operating-system account. DPAPI/Keychain protect stored credentials at rest; the trusted local worker must retrieve plaintext temporarily to fill the browser. The macOS helper is trusted `/usr/bin/security`, not an isolation boundary against another process under the same OS user. New runtime/profile directories use owner-only permissions on POSIX systems. Navigation classification is conservative label-based UI assistance, not a complete authorization boundary for arbitrary website scripts.
 
 Source control excludes environment files, credentials, runtime profiles, logs, downloads, and generated files. Never place real credentials in examples, tests, issue reports, or screenshots.
 
@@ -173,7 +213,7 @@ Optional environment variables:
 
 | Variable | Default |
 | --- | --- |
-| `ETRIC_DATA_DIR` | `%LOCALAPPDATA%/etric-mcp` |
+| `ETRIC_DATA_DIR` | Windows: `%LOCALAPPDATA%/etric-mcp`; macOS: `~/Library/Application Support/etris-mcp`; Linux: `~/etric-mcp` |
 | `ETRIC_PORT` | `43127` |
 | `ETRIC_BROWSER_MODE` | `background` (`visible` to show the browser) |
 
@@ -211,7 +251,7 @@ This is an independent community project and is not affiliated with HRD Corp.
 
 ## OSS maintenance and security
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). GitHub Actions tests Windows/Linux on Node 22/24, scans complete fetched Git history and every tracked file for secrets, scans source and workflows with CodeQL, and verifies dependency vulnerabilities, signatures, and available attestations. Checks run on every push/PR and weekly, including documentation changes. Live account tests are kept out of CI.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). GitHub Actions tests Windows/Linux/macOS (Apple Silicon and Intel) on Node 22/24, scans complete fetched Git history and every tracked file for secrets, scans source and workflows with CodeQL, and verifies dependency vulnerabilities, signatures, and available attestations. Checks run on every push/PR and weekly, including documentation changes. Live account tests are kept out of CI.
 
 The protected default branch requires passing checks and review. Actions use full commit SHAs, minimal token permissions, and no saved checkout credentials. Dependabot proposes dependency/action updates; GitHub secret scanning and push protection help prevent published secrets. Passing scans does not establish a security certification; the trust boundaries and scan limits are documented in the security policy.
 

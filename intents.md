@@ -21,7 +21,7 @@ Allow an authorized user to operate HRD Corp eTRiS through an MCP-compatible ass
 - Repository: **https://github.com/ossmalaysia/etris-mcp**.
 - Visibility: **public**. This supersedes the earlier private `anchorsprint` request.
 - Portal: **https://etris.hrdcorp.gov.my/DigiGov/login.jsp**.
-- Initial platform: Windows, Node.js, TypeScript, Playwright, and Windows DPAPI for saved credentials.
+- Platforms: Windows and macOS, Node.js, TypeScript, and Playwright. Saved credentials use Windows DPAPI or macOS Keychain; Linux supports session-only login. macOS support was requested after the initial Windows implementation and has separate native/live verification criteria in [rodmap.md](rodmap.md).
 - Connection: local stdio MCP shim to a shared worker bound to `127.0.0.1`.
 - Routine browser mode: `background`; interactive alternative: `visible`.
 
@@ -43,6 +43,7 @@ These are historical verification results, not a substitute for checking the cur
 
 ## Remaining acceptance criteria
 
+- Pass Apple Silicon and Intel macOS browser/Keychain CI and separately demonstrate the real portal workflow on an authorized Mac account. Windows live checks do not establish macOS live-account readiness.
 - Validate account-specific programme create/update fields and required attachments using an appropriate test account or a specifically authorized real operation.
 - Verify actual save/submission receipts and failure states before describing live writes as complete.
 - Determine whether the portal exposes deletion, cancellation, or another programme lifecycle operation; expose the actual supported behavior rather than assuming they are interchangeable.
