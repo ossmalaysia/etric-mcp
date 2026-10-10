@@ -15,6 +15,8 @@ A local MCP server for navigating HRD Corp eTRiS in a browser that runs in the b
 
 See [rodmap.md](rodmap.md) for pending features and validation boundaries. macOS native validation is tracked there separately from Windows live-account checks.
 
+The macOS implementation on PR #2 passed native Keychain and browser fixtures on Apple Silicon and Intel with Node 22/24 (13 tests per Mac job). A real Mac portal/Claude Desktop check remains pending; main receives the implementation only after required review and merge.
+
 ## Install and open login
 
 ```powershell

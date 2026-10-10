@@ -6,6 +6,7 @@ Feature status as of 2026-10-10. A registered tool or passing fixture test does 
 
 - Local stdio MCP discovery and request validation.
 - Windows saved login with DPAPI, automatic sign-in, and session recovery.
+- macOS implementation on PR #2: native Keychain create/read/update/delete and browser fixtures passed on Apple Silicon and Intel with Node 22/24. Real Mac portal login is not yet verified, and the changes are not on main until reviewed/merged.
 - Background browsing, visibility switching, authorized menu discovery, and notice handling with protected workspace windows.
 - Live Windows programme listing and reads of the three standard detail tabs for each visible record. The check covered the current results page, not every account or every result page.
 - CI tests, complete-public-file/history secret scans, dependency integrity checks, source/workflow analysis, and protected-main review requirements.
@@ -15,8 +16,8 @@ Feature status as of 2026-10-10. A registered tool or passing fixture test does 
 
 | Work | Status | Completion evidence needed |
 | --- | --- | --- |
-| macOS saved login and browser support | Keychain backend, platform data directory, native fixture tests, and Apple Silicon/Intel CI being added | Both macOS architectures pass browser and native Keychain tests; real macOS portal login remains a separate manual check. |
-| macOS Claude setup | Terminal commands, Desktop JSON example, and Keychain instructions added | Config examples parse; actual paths substituted; connection demonstrated in the user's Mac client. |
+| macOS live-account readiness | Native Keychain/browser fixtures pass on both architectures; real portal testing remains | Authorized Mac login, list/detail navigation, verification, and local review demonstrated. |
+| macOS Claude setup verification | Terminal commands, Desktop JSON example, and Keychain instructions added; JSON checked | Actual paths substituted and connection demonstrated in the user's Mac client. |
 | Pending source publication | Changes are on a PR branch | Required CI checks and an independent code-owner approval before merging to main. |
 
 ## Next implementation and validation

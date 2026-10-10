@@ -38,12 +38,13 @@ Allow an authorized user to operate HRD Corp eTRiS through an MCP-compatible ass
 - Eight automated tests passed at the most recent behavior update. The full source history passed a redacted Gitleaks scan.
 - The security update has eleven local regression tests and passing hosted Windows/Linux Node 22/24 CI. Hosted checks cover all tracked files and fetched history for secrets, dependency vulnerabilities/signatures/available attestations, JavaScript/TypeScript and Actions CodeQL, workflow lint, and repository policy. SonarCloud's security gate also passed. One expected local authentication flow has a narrow source-hash-bound review; other findings fail.
 - GitHub secret scanning, push protection, dependency security updates, and private vulnerability reporting are enabled. Secure maintenance uses required checks and independent code-owner review after the initial CI bootstrap.
+- macOS native Keychain and browser fixture checks passed on Apple Silicon and Intel with Node 22/24 at implementation commit `deb23d7`. Each Mac job passed all 13 tests, including credential creation, update, read, deletion, and independent vault identities. These are synthetic checks; real Mac account/Claude UI verification remains pending. The implementation is on PR #2 until required review/merge.
 
 These are historical verification results, not a substitute for checking the current implementation and session.
 
 ## Remaining acceptance criteria
 
-- Pass Apple Silicon and Intel macOS browser/Keychain CI and separately demonstrate the real portal workflow on an authorized Mac account. Windows live checks do not establish macOS live-account readiness.
+- Demonstrate the real portal workflow and Claude connection on an authorized Mac account. Windows live checks and macOS synthetic checks do not establish macOS live-account readiness.
 - Validate account-specific programme create/update fields and required attachments using an appropriate test account or a specifically authorized real operation.
 - Verify actual save/submission receipts and failure states before describing live writes as complete.
 - Determine whether the portal exposes deletion, cancellation, or another programme lifecycle operation; expose the actual supported behavior rather than assuming they are interchangeable.
