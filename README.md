@@ -108,6 +108,8 @@ This is a stdio server, usable by clients supporting local MCP processes. Adapt 
 claude mcp add --transport stdio etris -- node D:/dev/etric-mcp/dist/index.js
 ```
 
+For Claude Code project instructions, setup commands, and the operating workflow, see [CLAUDE.md](CLAUDE.md). It imports the shared agent guidance; it does not replace Desktop's JSON configuration.
+
 ChatGPT's hosted web interface cannot spawn this stdio process directly. Remote connection support is outside this local version. Use a client with local MCP support for now.
 
 ## Tools

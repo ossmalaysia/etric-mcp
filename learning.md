@@ -179,3 +179,23 @@ Read the durable lessons and latest relevant entries before starting work. Updat
 - **Validation:** README JSON parses and matches `mcp-config.example.json`. An actual stdio client using the documented config connected and discovered all 20 tools, including every named tool in the walkthrough. Repository policy/link checks, diff checks, and the redacted staged Gitleaks scan passed. No unrelated browser restart or live programme write was needed.
 - **Learning:** A Claude Desktop guide must explain merging entries, full application restart, absolute Node/build paths, connector permissions, and the difference between server display labels and tool names. Changing startup mode does not alter an already-running shared worker.
 - **Next:** The source changes require normal protected-branch CI and independent code-owner review. End-to-end setup in the user's Claude Desktop UI was not exercised by the stdio configuration check.
+
+### 2026-10-10 — Check security evidence and attempt the requested merge
+
+- **Objective:** Merge PR #2 and verify whether published secrets or security findings were detected.
+- **Observed:** All latest PR checks passed at commit `6be88b1`, including full-file/history secret scans, dependency integrity, CodeQL, and SonarCloud. GitHub returned zero open secret-scanning, Dependabot, and code-scanning alerts. Main requires one code-owner approval, latest-push approval, successful checks, and administrator enforcement. The sole listed owner is also the PR author; no independent review exists.
+- **Process:** Checked the exact PR head, change summary, protection settings, and alerts; scanned all local Git history with redacted Gitleaks output. Attempted a normal squash merge bound to the checked head, without an administrator bypass.
+- **Outcome:** GitHub rejected the merge because branch policy prohibits it. PR #2 remains open. No secrets were detected by the history scan; passing scanners and empty alert lists do not establish an absolute absence of vulnerabilities or sensitive data.
+- **Validation:** Gitleaks scanned 15 commits and reported no leaks. The checked local head matches the PR head. Documentation diff/repository policy checks passed. No protection was changed and no programme write occurred.
+- **Learning:** Merge authorization does not create the independent review required by the existing protected branch. A scanner's no-findings result is evidence within its coverage, not a universal security guarantee.
+- **Next:** Obtain an eligible independent code-owner review before retrying the merge. This note is included with the subsequent requested Claude instruction update; prior check results apply to the previously tested head.
+
+### 2026-10-10 — Expand Claude-compatible project instructions
+
+- **Objective:** Provide a Claude instruction file with practical local MCP setup and operating guidance.
+- **Observed:** Root `CLAUDE.md` already existed but only described shared objectives/defaults. Claude Code's documented filename is uppercase; a second case-only filename is unnecessary on Windows. The installed Claude Code version is 2.1.296.
+- **Process:** Expanded the existing file, imported `AGENTS.md` using Claude's documented import syntax, and added local registration/run commands, verification commands, Desktop guidance, tool sequencing, credential boundaries, development checks, and verified-workflow limits. Added a README link. Consulted official Claude memory/MCP docs and checked the local CLI help without changing personal Claude configuration.
+- **Outcome:** Claude Code receives shared project rules plus executable setup guidance. Desktop users are directed to JSON configuration and explicit instruction attachment instead of assuming automatic repository-file loading. The updated documentation is part of PR #2.
+- **Validation:** The shared import resolves, every documented npm script exists, every named tool matches the implementation, and the instruction file stays below 200 lines. CLI help supports the documented local scope, environment, and stdio options. Repository/link checks, diff checks, and the redacted staged secret scan passed. No new Claude model session, browser restart, or live programme write was performed.
+- **Learning:** Keep Claude-specific startup guidance in `CLAUDE.md`, import common agent rules, and distinguish instruction loading from MCP registration. Avoid duplicate files that differ only in capitalization.
+- **Next:** Updated PR checks and independent code-owner review are required before merge. Existing portal write-validation limitations remain.
